@@ -1,20 +1,10 @@
 # x 0: python sends deviceName (from stdin) to API and gets deviceID
-# √ 1: python requests CSR from Arduino - adds deviceID to payload
-# √ 2: Arduino generates the csr
-	# √ 2a: generate SHA256 (32B) using ECCx08
-		# ECCX08cert.h: 199
-		#   br_sha256_init(&sha256Context);
-		#   br_sha256_update(&sha256Context, csrInfo, csrInfoHeaderLen + csrInfoLen);
-		#   br_sha256_out(&sha256Context, csrInfoSha256);
-		#   
-		#   SHA256 is stored into csrInfoSha256
-	# 2b: the 64 bytes are streamed back to Python
-# 3: Python sends CSR to API and obtains the final certificate
-# 4: Python sends final certificate to Arduino
-# 5: Arduino does !ECCX08Cert.beginStorage
-
-only_serial = False
-exclude_cli_start = True
+# √ 1: python requests CSR from Board - packs deviceID into payload
+# √ 2: Board generates the csr
+# √ 3: the 64 bytes are streamed back to Python
+# √ 4: Python sends CSR to API and obtains signed certificate
+# x 5: Python sends final certificate to Arduino
+# x 6: Arduino does !ECCX08Cert.beginStorage
 
 import requests
 import getpass
@@ -26,12 +16,10 @@ import subprocess
 import crcmod
 import os
 
+import argparse
+
 from enum import Enum, auto
 import os
-home = os.path.expanduser('~')
-print(home)
-
-
 
 PROVISIONING_SKETCH_RESPONSE = [0x55, 0xaa, 0x01, 0x01, 0xff, 0xaa, 0x55]
 MAX_SERIAL_BUFFER = 128
@@ -72,6 +60,7 @@ class COMMAND(Enum):
 	SET_SIGNATURE = auto()
 	END_STORAGE = auto()
 
+# ERRORS
 class ERROR(Enum):
 	NONE = 0
 	SYNC = auto()
@@ -84,6 +73,8 @@ class ERROR(Enum):
 	SKETCH_UNKNOWN = auto()
 	GENERIC = auto()
 	ERROR_NO_DATA = auto();
+
+
 
 def compose_message(msg_type, msg_payload):
 	print(f"type {msg_type}")
@@ -234,27 +225,6 @@ def find_device():
 			device_list = []
 	return device_list
 
-# client_id = getpass.getpass('Client ID:')
-# secret_id = getpass.getpass('Secret ID:')
-
-tmp_serial_data = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05]
-#print(len(tmp_serial_data))
-#compose_message(MESSAGE_TYPE.DATA.value, tmp_serial_data)
-
-time.sleep(.4);
-
-client_id = "cKFMPSmpgX75JSepVXMoe57TqzVu1rI4" #input('Client ID:')
-secret_id = "KqJznij7YI5wqqzvQ1kszP6ciqI3cEQ3IKrUA6t0htoHcw82jnS26dhkyBwOEHJf" #input('Secret ID:')
-
-device_name = f"Z{time.time()}_testdevice" #input('Device name: ')
-
-device_list = find_device()
-
-if not only_serial:
-	token = generate_token(client_id, secret_id)
-	device_id = add_device(token, device_name, device_list[0]['fqbn'], device_list[0]['type'], device_list[0]['serial_number'])
-	print(f"device_id: {device_id}")
-
 def get_sketch_info():
 	print('Querying Crypto Provisioning Sketch...')
 	print('Waiting for response...')
@@ -277,7 +247,6 @@ def get_sketch_info():
 	parsed_response = parse_response_data(response_data, ERROR.SKETCH_UNKNOWN)
 	return parsed_response
 	
-
 def install_sketch():
 	print("Installing SAMD core")
 	installing_core = subprocess.Popen(["arduino-cli","core","install","arduino:samd"], stdout=subprocess.PIPE)
@@ -292,7 +261,6 @@ def install_sketch():
 	# uploading_sketch = subprocess.Popen(["arduino-cli","upload","Provisioning","-b", device_list[0]['fqbn'], "-p", device_list[0]['board_port']], stdout=subprocess.PIPE)
 	# uploading_sketch.wait()
 
-time.sleep(.5)
 def serial_connect():
 	device_list = find_device()
 	waiting_for_serial = True
@@ -313,10 +281,44 @@ def serial_connect():
 def serial_disconnect():
 	serial_port.close()
 
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser(description='Arduino IoT Cloud Provisioning Assistant')
+	parser.add_argument('--api_credentials_file', help='Provide the file containing Client ID and API Secret. Example: --api_credentials_file=/home/myuser/apicredentials.json')
+	parser.add_argument('--device_name', help='Choose the name your device will have in your dashboard. Example: --device_name=myNanoIoT')
+	args = parser.parse_args()
+
+if(args.api_credentials_file):
+	json_config_file = args.api_credentials_file
+else:
+	home = os.path.expanduser('~')
+	json_config_file = home + "/arduinoIoTCloudAPI.json"
+
+try:
+	with open(json_config_file) as json_cfg:
+		api_credentials = json.load(json_cfg)
+		client_id = api_credentials['client_id']
+		secret_id = api_credentials['secret_id']
+except Exception as e:
+	print("*****  ERROR  *****")
+	print(f"Failed to load Arduino IoT API Credentials JSON [{json_config_file}]")
+
+if(args.device_name):
+	device_name = args.device_name
+else:
+	device_name = f"IOTDevice_{time.time()}" #input('Device name: ')
+
+print(device_name)
+
+device_list = find_device()
+
+token = generate_token(client_id, secret_id)
+device_id = add_device(token, device_name, device_list[0]['fqbn'], device_list[0]['type'], device_list[0]['serial_number'])
+print(f"device_id: {device_id}")
 
 serial_port = serial_connect()
 time.sleep(2)
 sketch_unknown = True
+
 while(sketch_unknown):
 	if(get_sketch_info() != (ERROR.SKETCH_UNKNOWN)):
 		print("Correct Sketch Installed")
@@ -331,8 +333,7 @@ while(sketch_unknown):
 	time.sleep(3)
 
 time.sleep(1)
-if only_serial:
-	device_id = device_name
+
 # send GET_CSR command (has payload > 0)
 # pass in the device_name as payload
 # ******* CHANGE TO THE DEVICE ID RETURNED BY THE API *********
@@ -363,13 +364,8 @@ else:
 	print("Please relaunch the script to retry")
 	
 
-# board will generate CSR
-# wait for CSR or NACK
-
-
 certificate = send_csr(token, csr, device_id)
 print(certificate)
-
 
 # BEGIN STORAGE PROCESS ON DEVICE
 msg_payload = []
@@ -431,142 +427,8 @@ print(certificate['signature_asn1_y'])
 print("Cert Combined Signature")
 print(signature)
 send_command(COMMAND.SET_SIGNATURE.value, signature, False, "Signature set")
-
 send_command(COMMAND.END_STORAGE.value, {0})
 
-# msg_payload = []
-# msg_payload.append(COMMAND.SET_YEAR.value)
-
-# msg_payload += list(bytearray(year.encode()))
-# print(f"year encoded: {bytearray(year.encode())}")
-# serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
-# time.sleep(1)
-# response_data = []
-
-# while(serial_port.in_waiting > 0):
-# 	response_data.append(int.from_bytes(serial_port.read(), "little"))
-
-# print(response_data)
-
-# parsed_response = parse_response_data(response_data, ERROR.ERROR_GENERIC)
-# print(f"set_year response: {parsed_response}")
-# if(parsed_response != ERROR.CRC_FAIL):
-# 	print("ACK: year correctly stored")
-# #	certificate = send_csr(token, csr, device_id)
-# else:
-# 	print("data corrupted")
-# 	print("Please relaunch the script to retry")
-	
-
-
-
-# month = certificate['not_before'][5:7]
-# print(month)
-# msg_payload = []
-# msg_payload.append(COMMAND.SET_MONTH.value)
-
-# msg_payload += list(bytearray(month.encode()))
-
-# serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
-# time.sleep(1)
-# response_data = []
-
-# while(serial_port.in_waiting > 0):
-# 	response_data.append(int.from_bytes(serial_port.read(), "little"))
-
-# print(response_data)
-
-# parsed_response = parse_response_data(response_data, ERROR.ERROR_GENERIC)
-# print(f"set_month response: {parsed_response}")
-# if(parsed_response != ERROR.CRC_FAIL):
-# 	print("ACK: month correctly stored")
-# #	certificate = send_csr(token, csr, device_id)
-# else:
-# 	print("data corrupted")
-# 	print("Please relaunch the script to retry")
-
-
-
-
-# day = int(certificate['not_before'][8:10])
-# print(day)
-# hour = int(certificate['not_before'][11:13])
-# print(hour)
-# years_validity = 31
-# print(years_validity)
-# cert_serial = certificate['serial'].encode()
-# print(cert_serial)
-# cert_authority_key_id = (certificate['authority_key_identifier']).encode()
-# print(cert_authority_key_id)
-# signature = (certificate['signature_asn1_x'] + certificate['signature_asn1_y']).encode()
-# print(signature)
-
-
-
-
-# if not only_serial:
-# 	readme = serial_port.readline()
-# 	#print(readme[:-2].decode())
-# 	if readme[:-2].decode() == 'Would you like to generate a new private key and CSR (y/N): ':
-# 		print('Would you like to generate a new private key and CSR (y/N): y')
-# 		time.sleep(0.2)
-# 		serial_port.write('y\n'.encode())
-# 	if readme[:-2].decode() == 'Please enter the device id: ':
-# 		print('Please enter the device id: {}'.format(device_id))
-# 		time.sleep(0.2)
-# 		serial_port.write((device_id + '\n').encode())
-# 	if readme[:5].decode() == '-----':
-# 		i = 0
-# 		csr = ''
-# 		while i < 7:
-# 			if i != 6:
-# 				csr = csr + readme.decode()
-# 				readme = serial_port.readline()
-# 			else:
-# 				csr = csr + readme[:-1].decode()
-# 			i+= 1
-# 		print(csr)
-# 		certificate = send_csr(token, csr, device_id)
-# 	if readme[:-2].decode() == 'Please enter the issue year of the certificate (2000 - 2031): ':
-# 		year = str(int(certificate['not_before'][:4]))
-# 		print('Please enter the issue year of the certificate (2000 - 2031): {}'.format(year))
-# 		time.sleep(0.2)
-# 		serial_port.write((year + '\n').encode())
-# 	if readme[:-2].decode() == 'Please enter the issue month of the certificate (1 - 12): ':
-# 		month = str(int(certificate['not_before'][5:7]))
-# 		print('Please enter the issue month of the certificate (1 - 12): {}'.format(month))
-# 		time.sleep(0.2)
-# 		serial_port.write((month + '\n').encode())
-# 	if readme[:-2].decode() == 'Please enter the issue day of the certificate (1 - 31): ':
-# 		day = str(int(certificate['not_before'][8:10]))
-# 		print('Please enter the issue day of the certificate (1 - 31): {}'.format(day))
-# 		time.sleep(0.2)
-# 		serial_port.write((day + '\n').encode())
-# 	if readme[:-2].decode() == 'Please enter the issue hour of the certificate (0 - 23): ':
-# 		hour = str(int(certificate['not_before'][11:13]))
-# 		print('Please enter the issue hour of the certificate (0 - 23): {}'.format(hour))
-# 		time.sleep(0.2)
-# 		serial_port.write((hour + '\n').encode())
-# 	if readme[:-2].decode() == 'Please enter how many years the certificate is valid for (0 - 31): ':
-# 		print('Please enter how many years the certificate is valid for (0 - 31): 31')
-# 		time.sleep(0.2)
-# 		serial_port.write(('31\n').encode())
-# 	if readme[:-2].decode() == 'Please enter the certificates serial number: ':
-# 		print('Please enter the certificates serial number: {}'.format(certificate['serial']))
-# 		time.sleep(0.2)
-# 		serial_port.write((certificate['serial'] + '\n').encode())
-# 	if readme[:-2].decode() == 'Please enter the certificates authority key identifier: ':
-# 		print('Please enter the certificates authority key identifier: {}'.format(certificate['authority_key_identifier']))
-# 		time.sleep(0.2)
-# 		serial_port.write((certificate['authority_key_identifier'] + '\n').encode())
-# 	if readme[:-2].decode() == 'Please enter the certificates signature: ':
-# 		signature = str(certificate['signature_asn1_x'] + certificate['signature_asn1_y'])
-# 		print('Please enter the certificates signature: {}'.format(signature))
-# 		time.sleep(0.2)
-# 		serial_port.write((signature + '\n').encode())
-# 		time.sleep(2)
-# 		#break
-# 	time.sleep(0.1)
 
 print('Done! New device {} added.'.format(device_name))
 
