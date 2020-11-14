@@ -121,7 +121,7 @@ def parse_response_data(r_data, failure_error):
 
 def send_command(command, payload = bytearray([]), encode = False, verbose_message = "it worked"):
 	msg_payload = []
-	msg_payload.append(command)
+	msg_payload.append(command.value)
 
 	if(encode):
 		msg_payload += list(bytearray(payload.encode()))
@@ -141,6 +141,7 @@ def send_command(command, payload = bytearray([]), encode = False, verbose_messa
 	print(f"{command} response: {parsed_response}")
 	if(parsed_response != ERROR.CRC_FAIL):
 		print(f"ACK: {verbose_message}")
+		return parsed_response
 	#	certificate = send_csr(token, csr, device_id)
 	else:
 		print("data corrupted")
@@ -305,7 +306,7 @@ except Exception as e:
 if(args.device_name):
 	device_name = args.device_name
 else:
-	device_name = f"IOTDevice_{time.time()}" #input('Device name: ')
+	device_name = f"IOTDevice_{int(time.time())}" #input('Device name: ')
 
 print(device_name)
 
@@ -341,8 +342,8 @@ print("REQUEST CSR")
 print(f"Device ID: {device_id}")
 msg_payload = []
 msg_payload.append(COMMAND.GET_CSR.value)
-
 msg_payload += list(bytearray(device_id.encode()))
+
 serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
 time.sleep(3)
 
@@ -368,56 +369,57 @@ certificate = send_csr(token, csr, device_id)
 print(certificate)
 
 # BEGIN STORAGE PROCESS ON DEVICE
-msg_payload = []
-msg_payload.append(COMMAND.BEGIN_STORAGE.value)
+# msg_payload = []
+# msg_payload.append(COMMAND.BEGIN_STORAGE.value)
 
-serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
-time.sleep(1)
-response_data = []
-while(serial_port.in_waiting > 0):
-	response_data.append(int.from_bytes(serial_port.read(), "little"))
+# serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
+# time.sleep(1)
+# response_data = []
+# while(serial_port.in_waiting > 0):
+# 	response_data.append(int.from_bytes(serial_port.read(), "little"))
 
-print(response_data)
-parsed_response = parse_response_data(response_data, ERROR.GENERIC)
-print(f"begin storage response: {parsed_response}")
-if(parsed_response != ERROR.CRC_FAIL):
-	print("ACK: Crypto Storage INIT OK")
-#	certificate = send_csr(token, csr, device_id)
-else:
-	print("data corrupted")
-	print("Please relaunch the script to retry")
+# print(response_data)
+# parsed_response = parse_response_data(response_data, ERROR.GENERIC)
+# print(f"begin storage response: {parsed_response}")
+# if(parsed_response != ERROR.CRC_FAIL):
+# 	print("ACK: Crypto Storage INIT OK")
+# #	certificate = send_csr(token, csr, device_id)
+# else:
+# 	print("data corrupted")
+#	print("Please relaunch the script to retry")
 
+send_command(command = COMMAND.BEGIN_STORAGE, verbose_message = "Crytpo Storage INIT OK")
 
 year = certificate['not_before'][:4]
 print(year)
-send_command(COMMAND.SET_YEAR.value, year, True, "YEAR set")
+send_command(COMMAND.SET_YEAR, year, True, "YEAR set")
 
 month = certificate['not_before'][5:7]
 print(month)
-send_command(COMMAND.SET_MONTH.value, month, True, "MONTH set")
+send_command(COMMAND.SET_MONTH, month, True, "MONTH set")
 
 day = certificate['not_before'][8:10]
 print(day)
-send_command(COMMAND.SET_DAY.value, day, True, "DAY set")
+send_command(COMMAND.SET_DAY, day, True, "DAY set")
 
 hour = certificate['not_before'][11:13]
 print(hour)
-send_command(COMMAND.SET_HOUR.value, hour, True, "HOUR set")
+send_command(COMMAND.SET_HOUR, hour, True, "HOUR set")
 
 years_validity = "31"
 print("Validity in years")
 print(years_validity)
-send_command(COMMAND.SET_VALIDITY.value, years_validity, True, "VALIDITY set")
+send_command(COMMAND.SET_VALIDITY, years_validity, True, "VALIDITY set")
 
 cert_serial = bytearray.fromhex(certificate['serial'])
 print("Cert Serial")
 print(cert_serial)
-send_command(COMMAND.SET_CERT_SERIAL.value, cert_serial, False, "Serial set")
+send_command(COMMAND.SET_CERT_SERIAL, cert_serial, False, "Serial set")
 
 cert_authority_key_id = bytearray.fromhex(certificate['authority_key_identifier'])
 print("Cert Auth Key ID")
 print(cert_authority_key_id)
-send_command(COMMAND.SET_AUTH_KEY.value, cert_authority_key_id, False, "Authority Key ID set")
+send_command(COMMAND.SET_AUTH_KEY, cert_authority_key_id, False, "Authority Key ID set")
 
 signature = bytearray.fromhex(certificate['signature_asn1_x'] + certificate['signature_asn1_y'])
 print("asn1_x")
@@ -426,8 +428,8 @@ print("asn1_y")
 print(certificate['signature_asn1_y'])
 print("Cert Combined Signature")
 print(signature)
-send_command(COMMAND.SET_SIGNATURE.value, signature, False, "Signature set")
-send_command(COMMAND.END_STORAGE.value, {0})
+send_command(COMMAND.SET_SIGNATURE, signature, False, "Signature set")
+send_command(COMMAND.END_STORAGE)
 
 
 print('Done! New device {} added.'.format(device_name))
