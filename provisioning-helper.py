@@ -1,11 +1,3 @@
-# x 0: python sends deviceName (from stdin) to API and gets deviceID
-# √ 1: python requests CSR from Board - packs deviceID into payload
-# √ 2: Board generates the csr
-# √ 3: the 64 bytes are streamed back to Python
-# √ 4: Python sends CSR to API and obtains signed certificate
-# x 5: Python sends final certificate to Arduino
-# x 6: Arduino does !ECCX08Cert.beginStorage
-
 import requests
 import getpass
 import json
