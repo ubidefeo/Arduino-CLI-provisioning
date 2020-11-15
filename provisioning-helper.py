@@ -83,21 +83,21 @@ def compose_message(msg_type, msg_payload):
 	formed_message.append(msg_type)
 	payload_size = len(msg_payload) + CRC16_SIZE
 
-	print(f"data size >>> {len(msg_payload)}")
+	#print(f"data size >>> {len(msg_payload)}")
 	payload_size_L = (payload_size.to_bytes(2, "big"))[1]
 	payload_size_H = (payload_size.to_bytes(2, "big"))[0]
-	print(f"{hex(payload_size_H)} - {hex(payload_size_L)}")
+	#print(f"{hex(payload_size_H)} - {hex(payload_size_L)}")
 
 	formed_message.append(payload_size_H)
 	formed_message.append(payload_size_L)
 	formed_message += bytearray(msg_payload)
 	crc = _CRC_FUNC(bytearray(msg_payload))
-	print(hex(crc))
+	#print(hex(crc))
 	formed_message.append(((crc >> 8) & 0xff))
 	formed_message.append(crc & 0xff)
 	formed_message += bytearray(msg_end)
-	print(f"msg payload: {msg_payload}")
-	print(f"formed message: {formed_message}")
+	#print(f"msg payload: {msg_payload}")
+	#print(f"formed message: {formed_message}")
 	return formed_message
 
 
@@ -107,20 +107,19 @@ def parse_response_data(r_data, failure_error):
 		return ERROR.GENERIC
 	msg_type = r_data[2]
 	msg_length = r_data[3] << 8 | r_data[4]
-	print(f"incoming data length: {msg_length}")
+	#print(f"incoming data length: {msg_length}")
 	payload_bytes = (r_data[5:][:msg_length - CRC16_SIZE])
 	#print(payload_bytes)
 	payload_computed_CRC = _CRC_FUNC(bytearray(payload_bytes))
-	print(f"computed CRC: {hex(payload_computed_CRC)}")
+	#print(f"computed CRC: {hex(payload_computed_CRC)}")
 	payload_received_CRC = r_data[len(r_data) - 4] << 8 | r_data[len(r_data) - 3]	
-	print(f"received CRC: {hex(payload_received_CRC)}")
+	#print(f"received CRC: {hex(payload_received_CRC)}")
 	if(payload_computed_CRC == payload_received_CRC):
 		return payload_bytes;
 	else:
 		return failure_error
 
-
-def send_command(command, payload = bytearray([]), encode = False, verbose_message = "it worked"):
+def send_command(command, payload = bytearray([]), encode = False, verbose_message = "My job here is done."):
 	msg_payload = []
 	msg_payload.append(command.value)
 
@@ -136,10 +135,10 @@ def send_command(command, payload = bytearray([]), encode = False, verbose_messa
 	while(serial_port.in_waiting > 0):
 		response_data.append(int.from_bytes(serial_port.read(), "little"))
 
-	print(response_data)
+	#print(response_data)
 
 	parsed_response = parse_response_data(response_data, ERROR.CRC_FAIL)
-	print(f"{command} response: {parsed_response}")
+	#print(f"{command} response: {parsed_response}")
 	if(parsed_response != ERROR.CRC_FAIL):
 		print(f"ACK: {verbose_message}")
 		return parsed_response
@@ -187,7 +186,6 @@ def send_csr(token, csr, device_id):
 			'enabled': True
 			}
 	response = requests.put(url, headers=headers, data=json.dumps(data_cert))
-	print(response.text)
 	return json.loads(response.text)['compressed']
 
 def board_detection(port):
@@ -266,11 +264,10 @@ def install_sketch():
 def serial_connect():
 	device_list = find_device()
 	waiting_for_serial = True
-	print(f"Trying to connect to {device_list[0]['board_name']} on port {device_list[0]['board_port']}")
 	time.sleep(3)
 	while waiting_for_serial:
 		try:
-			print("trying to connect to serial")
+			print(f"Attempting connection to {device_list[0]['board_name']} on port {device_list[0]['board_port']}")
 			serial_port_handler = serial.Serial(device_list[0]['board_port'], 57600, write_timeout = 5)
 			waiting_for_serial = False
 		except:
@@ -334,13 +331,11 @@ while(sketch_unknown):
 	time.sleep(3)
 
 time.sleep(1)
-exit()
 
 # send GET_CSR command (has payload > 0)
 # pass in the device_name as payload
 # ******* CHANGE TO THE DEVICE ID RETURNED BY THE API *********
-print("REQUEST CSR")
-print(f"Device ID: {device_id}")
+print(f"REQUESTING CSR for Device with ID: {device_id}")
 # msg_payload = []
 # msg_payload.append(COMMAND.GET_CSR.value)
 # msg_payload += list(bytearray(device_id.encode()))
@@ -382,51 +377,46 @@ else:
 certificate = send_csr(token, csr, device_id)
 print(certificate)
 
+print("Requesting Begin Storage")
 send_command(command = COMMAND.BEGIN_STORAGE, verbose_message = "Crytpo Storage INIT OK")
 
 year = certificate['not_before'][:4]
-print(year)
+print(f"Sending Year: {year}")
 send_command(COMMAND.SET_YEAR, year, True, "YEAR set")
 
 month = certificate['not_before'][5:7]
-print(month)
+print(f"Sending Month: {month}")
 send_command(COMMAND.SET_MONTH, month, True, "MONTH set")
 
 day = certificate['not_before'][8:10]
-print(day)
+print(f"Sending Day: {day}")
 send_command(COMMAND.SET_DAY, day, True, "DAY set")
 
 hour = certificate['not_before'][11:13]
-print(hour)
+print(f"Sending Hour: {hour}")
 send_command(COMMAND.SET_HOUR, hour, True, "HOUR set")
 
 years_validity = "31"
-print("Validity in years")
-print(years_validity)
+print(f"Sending Validity (years): {years_validity}")
 send_command(COMMAND.SET_VALIDITY, years_validity, True, "VALIDITY set")
 
 cert_serial = bytearray.fromhex(certificate['serial'])
-print("Cert Serial")
-print(cert_serial)
+print(f"Sending Certificate Serial: {cert_serial}")
 send_command(COMMAND.SET_CERT_SERIAL, cert_serial, False, "Serial set")
 
 cert_authority_key_id = bytearray.fromhex(certificate['authority_key_identifier'])
-print("Cert Auth Key ID")
-print(cert_authority_key_id)
+print(f"Sending Certificate Authority Key: {cert_authority_key_id}")
 send_command(COMMAND.SET_AUTH_KEY, cert_authority_key_id, False, "Authority Key ID set")
 
 signature = bytearray.fromhex(certificate['signature_asn1_x'] + certificate['signature_asn1_y'])
-print("asn1_x")
-print(certificate['signature_asn1_x'])
-print("asn1_y")
-print(certificate['signature_asn1_y'])
-print("Cert Combined Signature")
-print(signature)
+print(f"Sending Signature: {signature}")
 send_command(COMMAND.SET_SIGNATURE, signature, False, "Signature set")
+time.sleep(1)
+print("Requesting End Storage")
 send_command(COMMAND.END_STORAGE)
 
 time.sleep(2)
-
+print("Requesting Certificate Reconstruction")
 send_command(command = COMMAND.RECONSTRUCT_CERT, verbose_message = "reconstruct ok")
 
 
