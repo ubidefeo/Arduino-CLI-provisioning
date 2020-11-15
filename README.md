@@ -2,7 +2,7 @@
 Arduino IoT Cloud "Getting Started" via command line
 
 Based off initial work by Luigi Gubello (@luigigubello).
-Greatly influenced by Martino Facchin (@mfacchin).
+Greatly influenced by Martino Facchin (@facchinm).
 
 ### Usage
 
