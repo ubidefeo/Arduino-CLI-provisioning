@@ -37,7 +37,8 @@ enum class COMMAND {
 	SET_CERT_SERIAL,
 	SET_AUTH_KEY,
 	SET_SIGNATURE,
-	END_STORAGE
+	END_STORAGE,
+	RECONSTRUCT_CERT
 
 };
 enum class ERROR : uint8_t{
@@ -104,7 +105,7 @@ String signature;
 
 
 void setup() {
-	Serial.begin(9600);
+	Serial.begin(57600);
 	Serial1.begin(9600);
 	delay(2000);
 	Serial1.println("Checking Crypto-chip...");
@@ -115,99 +116,8 @@ void setup() {
 	delay(1000);
 #ifndef EXCLUDE_CODE
 	
-	String issueYear = promptAndReadLine(
-			"Please enter the issue year of the certificate (2000 - 2031): ");
-	String issueMonth = promptAndReadLine(
-			"Please enter the issue month of the certificate (1 - 12): ");
-	String issueDay = promptAndReadLine(
-			"Please enter the issue day of the certificate (1 - 31): ");
-	String issueHour = promptAndReadLine(
-			"Please enter the issue hour of the certificate (0 - 23): ");
-	String expireYears = promptAndReadLine(
-			"Please enter how many years the certificate is valid for (0 - 31): ");
-	String serialNumber =
-			promptAndReadLine("Please enter the certificates serial number: ");
-	String authorityKeyIdentifier = promptAndReadLine(
-			"Please enter the certificates authority key identifier: ");
-	String signature =
-			promptAndReadLine("Please enter the certificates signature: ");
-
-	byte deviceIDBytes[72];
-	byte serialNumberBytes[16];
-	byte authorityKeyIdentifierBytes[20];
-	byte signatureBytes[64];
-
-	deviceId.getBytes(deviceIDBytes, sizeof(deviceIDBytes));
-	hexStringToBytes(serialNumber, serialNumberBytes, sizeof(serialNumberBytes));
-	hexStringToBytes(authorityKeyIdentifier, authorityKeyIdentifierBytes,
-									 sizeof(authorityKeyIdentifierBytes));
-	hexStringToBytes(signature, signatureBytes, sizeof(signatureBytes));
-
-	if (!ECCX08.writeSlot(deviceIdSlot, deviceIDBytes, sizeof(deviceIDBytes))) {
-		Serial.println("Error storing device id!");
-		while (1);
-	}
-
-	if (!ECCX08Cert.beginStorage(compressedCertSlot,
-															 serialNumberAndAuthorityKeyIdentifierSlot)) {
-		Serial.println("Error starting ECCX08 storage!");
-		while (1)
-			;
-	}
-
-	ECCX08Cert.setSignature(signatureBytes);
-	ECCX08Cert.setAuthorityKeyIdentifier(authorityKeyIdentifierBytes);
-	ECCX08Cert.setSerialNumber(serialNumberBytes);
-	ECCX08Cert.setIssueYear(issueYear.toInt());
-	ECCX08Cert.setIssueMonth(issueMonth.toInt());
-	ECCX08Cert.setIssueDay(issueDay.toInt());
-	ECCX08Cert.setIssueHour(issueHour.toInt());
-	ECCX08Cert.setExpireYears(expireYears.toInt());
-
-	if (!ECCX08Cert.endStorage()) {
-		Serial.println("Error storing ECCX08 compressed cert!");
-		while (1)
-			;
-	}
-
-	if (!ECCX08Cert.beginReconstruction(
-					keySlot, compressedCertSlot,
-					serialNumberAndAuthorityKeyIdentifierSlot)) {
-		Serial.println("Error starting ECCX08 cert reconstruction!");
-		while (1)
-			;
-	}
-
-	ECCX08Cert.setIssuerCountryName("US");
-	ECCX08Cert.setIssuerOrganizationName("Arduino LLC US");
-	ECCX08Cert.setIssuerOrganizationalUnitName("IT");
-	ECCX08Cert.setIssuerCommonName("Arduino");
-
-	if (!ECCX08Cert.endReconstruction()) {
-		Serial.println("Error reconstructing ECCX08 compressed cert!");
-		while (1)
-			;
-	}
-
-	if (!DEBUG) {
-		return;
-	}
-
-	Serial.println("Compressed cert = ");
-
-	const byte *certData = ECCX08Cert.bytes();
-	int certLength = ECCX08Cert.length();
-
-	for (int i = 0; i < certLength; i++) {
-		byte b = certData[i];
-
-		if (b < 16) {
-			Serial.print('0');
-		}
-		Serial.print(b, HEX);
-	}
-	Serial.println();
-
+	
+	
 #endif
 	delay(2000);
 	serialNumber = ECCX08.serialNumber();
@@ -349,18 +259,21 @@ void processCommand() {
 		char charBuffer[2];
 		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
 			Serial1.print(deviceIDBytes[i], HEX);
-			sprintf(charBuffer,"%02X", deviceIDBytes[i]);
+			sprintf(charBuffer,"%02x", deviceIDBytes[i]);
 			deviceIDstring += charBuffer;//String(deviceIDBytes[i], 16);
+			//deviceIDstring += deviceIDBytes[i];
 		}
 
 		Serial1.println();
 		Serial1.print("request for CSR with device ID ");
 		Serial1.println(deviceIDstring);
 
-		if(generateCSR(false) == ERROR::CSR_GEN_SUCCESS){
+		if(generateCSR() == ERROR::CSR_GEN_SUCCESS){
 			sendData(MESSAGE_TYPE::DATA, csr.c_str(), csr.length());
+			Serial1.println("CSR GENERATED ON BOARD");
 		}else{
-
+			Serial1.println("SOMETHING WENT WRONG");
+			while(1);
 		}
 	}
 	if(cmdCode == COMMAND::BEGIN_STORAGE){
@@ -604,6 +517,48 @@ void processCommand() {
 		char response[] = {char(RESPONSE::ACK)};
 		sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 	}
+
+
+	if(cmdCode == COMMAND::RECONSTRUCT_CERT){
+
+		if (!ECCX08Cert.beginReconstruction(keySlot, compressedCertSlot, serialNumberAndAuthorityKeyIdentifierSlot)) {
+			Serial1.println("Error starting ECCX08 cert reconstruction!");
+			char response[] = {char(RESPONSE::ERROR)};
+			sendData(MESSAGE_TYPE::RESPONSE, response, 1);
+			return;
+		}
+	
+		ECCX08Cert.setIssuerCountryName("US");
+		ECCX08Cert.setIssuerOrganizationName("Arduino LLC US");
+		ECCX08Cert.setIssuerOrganizationalUnitName("IT");
+		ECCX08Cert.setIssuerCommonName("Arduino");
+
+		if (!ECCX08Cert.endReconstruction()) {
+			Serial1.println("Error reconstructing ECCX08 compressed cert!");
+			char response[] = {char(RESPONSE::ERROR)};
+			sendData(MESSAGE_TYPE::RESPONSE, response, 1);
+			return;
+		}
+
+		Serial1.println("Compressed cert = ");
+
+		const byte *certData = ECCX08Cert.bytes();
+		int certLength = ECCX08Cert.length();
+
+		for (int i = 0; i < certLength; i++) {
+			byte b = certData[i];
+
+			if (b < 16) {
+				Serial1.print('0');
+			}
+			Serial1.print(b, HEX);
+			
+		}
+		Serial1.println();
+		char response[] = {char(RESPONSE::ACK)};
+		sendData(MESSAGE_TYPE::RESPONSE, response, 1);
+	}
+
 }
 
 void processRawData(bool checkSumOK) {
@@ -665,53 +620,6 @@ void changeState(MACHINE_STATE _newState) {
 	machineState = _newState;
 }
 
-String promptAndReadLine(const char *prompt) {
-	Serial.print(prompt);
-	String s = readLine();
-	Serial.println(s);
-
-	return s;
-}
-
-String readLine() {
-	String line;
-
-	while (1) {
-		if (Serial.available()) {
-			char c = Serial.read();
-
-			if (c == '\r') {
-				// ignore
-			} else if (c == '\n') {
-				break;
-			}
-
-			line += c;
-		}
-	}
-
-	line.trim();
-
-	return line;
-}
-
-void hexStringToBytes(String &in, byte out[], int length) {
-	int inLength = in.length();
-	in.toUpperCase();
-	int outLength = 0;
-
-	for (int i = 0; i < inLength && outLength < length; i += 2) {
-		char highChar = in[i];
-		char lowChar = in[i + 1];
-
-		byte highByte =
-				(highChar <= '9') ? (highChar - '0') : (highChar + 10 - 'A');
-		byte lowByte = (lowChar <= '9') ? (lowChar - '0') : (lowChar + 10 - 'A');
-
-		out[outLength++] = (highByte << 4) | (lowByte & 0xF);
-	}
-}
-
 uint8_t cryptoInit() {
 	unsigned long ecctimeout = 1000;
 	unsigned long beginOfTime = millis();
@@ -738,7 +646,7 @@ ERROR cryptoLock() {
 	}
 }
 
-ERROR generateCSR(bool useSerialNumber){
+ERROR generateCSR(){
 	if(!ECCX08.locked()){
 		Serial1.println("Chip is not locked");
 		return ERROR::LOCK_FAIL;
@@ -756,11 +664,8 @@ ERROR generateCSR(bool useSerialNumber){
 	// ECCX08CSR.setOrganizationName("Arduino");
 	// ECCX08CSR.setOrganizationalUnitName("Tooling Team");
 	
-	if(useSerialNumber){
-		ECCX08CSR.setCommonName(serialNumber);
-	}else{
-		ECCX08CSR.setCommonName(deviceIDstring);
-	}
+	
+	ECCX08CSR.setCommonName(deviceIDstring);
 	csr = ECCX08CSR.end();
 	if (!csr) {
 		Serial1.println("Error generating CSR!");

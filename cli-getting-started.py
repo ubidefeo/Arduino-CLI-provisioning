@@ -59,6 +59,7 @@ class COMMAND(Enum):
 	SET_AUTH_KEY = auto()
 	SET_SIGNATURE = auto()
 	END_STORAGE = auto()
+	RECONSTRUCT_CERT = auto()
 
 # ERRORS
 class ERROR(Enum):
@@ -146,7 +147,7 @@ def send_command(command, payload = bytearray([]), encode = False, verbose_messa
 	else:
 		print("data corrupted")
 		print("Please relaunch the script to retry")
-
+		return ERROR.CRC_FAIL
 
 
 def generate_token(client_id, secret_id):
@@ -186,8 +187,8 @@ def send_csr(token, csr, device_id):
 			'enabled': True
 			}
 	response = requests.put(url, headers=headers, data=json.dumps(data_cert))
-	certificate = json.loads(response.text)['compressed']
-	return certificate
+	print(response.text)
+	return json.loads(response.text)['compressed']
 
 def board_detection(port):
 	if port.pid in [int('0x8057', 16), int('0x0057', 16)]:
@@ -228,10 +229,10 @@ def find_device():
 
 def get_sketch_info():
 	print('Querying Crypto Provisioning Sketch...')
-	print('Waiting for response...')
+	#print('Waiting for response...')
 	msg_payload = []
 	msg_payload.append(COMMAND.GET_SKETCH_INFO.value)
-	print(msg_payload)
+	#print(msg_payload)
 	serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
 	time.sleep(.5)
 
@@ -265,18 +266,17 @@ def install_sketch():
 def serial_connect():
 	device_list = find_device()
 	waiting_for_serial = True
-	print('Trying to connect to {} on port {}'.format(device_list[0]['board_name'], device_list[0]['board_port']))
+	print(f"Trying to connect to {device_list[0]['board_name']} on port {device_list[0]['board_port']}")
 	time.sleep(3)
 	while waiting_for_serial:
 		try:
 			print("trying to connect to serial")
-			serial_port_handler = serial.Serial(device_list[0]['board_port'], 9600, write_timeout = 5)
+			serial_port_handler = serial.Serial(device_list[0]['board_port'], 57600, write_timeout = 5)
 			waiting_for_serial = False
-
 		except:
 			print("cannot connect to serial")
 			waiting_for_serial = True
-		time.sleep(0.1)
+		time.sleep(2)
 	return serial_port_handler
 
 def serial_disconnect():
@@ -308,21 +308,21 @@ if(args.device_name):
 else:
 	device_name = f"IOTDevice_{int(time.time())}" #input('Device name: ')
 
-print(device_name)
+print(f"Provisioning device with name {device_name}")
 
 device_list = find_device()
 
 token = generate_token(client_id, secret_id)
 device_id = add_device(token, device_name, device_list[0]['fqbn'], device_list[0]['type'], device_list[0]['serial_number'])
-print(f"device_id: {device_id}")
+print(f"IoT Cloud generated Device ID: {device_id}")
 
 serial_port = serial_connect()
 time.sleep(2)
-sketch_unknown = True
 
+sketch_unknown = True
 while(sketch_unknown):
 	if(get_sketch_info() != (ERROR.SKETCH_UNKNOWN)):
-		print("Correct Sketch Installed")
+		print("Provisioning Sketch found. Moving forward...")
 		sketch_unknown = False
 		break
 	print("Wrong Sketch Installed. Installation in progress...")
@@ -334,59 +334,53 @@ while(sketch_unknown):
 	time.sleep(3)
 
 time.sleep(1)
+exit()
 
 # send GET_CSR command (has payload > 0)
 # pass in the device_name as payload
 # ******* CHANGE TO THE DEVICE ID RETURNED BY THE API *********
 print("REQUEST CSR")
 print(f"Device ID: {device_id}")
-msg_payload = []
-msg_payload.append(COMMAND.GET_CSR.value)
-msg_payload += list(bytearray(device_id.encode()))
-
-serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
-time.sleep(3)
-
-response_data = []
-
-while(serial_port.in_waiting > 0):
-	response_data.append(int.from_bytes(serial_port.read(), "little"))
-
-print(response_data)
-csr = ""
-parsed_response = parse_response_data(response_data, ERROR.CRC_FAIL)
-if(parsed_response != ERROR.CRC_FAIL):
-	print("CSR received")
-	csr = bytearray(parsed_response).decode('utf-8')
-	print(csr)
-#	certificate = send_csr(token, csr, device_id)
-else:
-	print("CSR data corrupted")
-	print("Please relaunch the script to retry")
-	
-
-certificate = send_csr(token, csr, device_id)
-print(certificate)
-
-# BEGIN STORAGE PROCESS ON DEVICE
 # msg_payload = []
-# msg_payload.append(COMMAND.BEGIN_STORAGE.value)
+# msg_payload.append(COMMAND.GET_CSR.value)
+# msg_payload += list(bytearray(device_id.encode()))
 
 # serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
-# time.sleep(1)
+# time.sleep(3)
+
 # response_data = []
+
 # while(serial_port.in_waiting > 0):
 # 	response_data.append(int.from_bytes(serial_port.read(), "little"))
 
 # print(response_data)
-# parsed_response = parse_response_data(response_data, ERROR.GENERIC)
-# print(f"begin storage response: {parsed_response}")
+# csr = ""
+# parsed_response = parse_response_data(response_data, ERROR.CRC_FAIL)
 # if(parsed_response != ERROR.CRC_FAIL):
-# 	print("ACK: Crypto Storage INIT OK")
+# 	print("CSR received")
+# 	csr = bytearray(parsed_response).decode('utf-8')
+# 	print(csr)
 # #	certificate = send_csr(token, csr, device_id)
 # else:
-# 	print("data corrupted")
-#	print("Please relaunch the script to retry")
+# 	print("CSR data corrupted")
+# 	print("Please relaunch the script to retry")
+	
+print(device_id)
+print(device_id.encode())
+print(bytearray(device_id.encode()))
+print(list(bytearray(device_id.encode())))
+
+csr = send_command(command = COMMAND.GET_CSR, payload = list(bytearray(device_id.encode())), encode = False, verbose_message = "CSR Obtained")
+if(csr != ERROR.CRC_FAIL):
+	print("CSR received")
+	csr = bytearray(csr).decode('utf-8')
+else:
+	print("CSR REQUEST FAILED. Data returned below:")
+	print(csr)
+	exit()
+
+certificate = send_csr(token, csr, device_id)
+print(certificate)
 
 send_command(command = COMMAND.BEGIN_STORAGE, verbose_message = "Crytpo Storage INIT OK")
 
@@ -430,6 +424,10 @@ print("Cert Combined Signature")
 print(signature)
 send_command(COMMAND.SET_SIGNATURE, signature, False, "Signature set")
 send_command(COMMAND.END_STORAGE)
+
+time.sleep(2)
+
+send_command(command = COMMAND.RECONSTRUCT_CERT, verbose_message = "reconstruct ok")
 
 
 print('Done! New device {} added.'.format(device_name))
