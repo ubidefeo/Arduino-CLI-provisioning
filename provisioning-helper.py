@@ -195,6 +195,8 @@ def board_detection(port):
 		return {'board_port': port.device, 'board_name': port.product, 'type': 'mkrwan1300', 'fqbn': 'arduino:samd:mkrwan1300', 'serial_number': port.serial_number}
 	elif port.pid in [int('0x8059', 16), int('0x0059', 16)]:
 		return {'board_port': port.device, 'board_name': port.product, 'type': 'mkrwan1310', 'fqbn': 'arduino:samd:mkrwan1310', 'serial_number': port.serial_number}
+	elif port.pid in [int('0x2145', 16), int('0x2145', 16)]:
+		return {'board_port': port.device, 'board_name': port.product, 'type': 'nano_33_iot', 'fqbn': 'arduino:samd:nano_33_iot', 'serial_number': port.serial_number}
 	else:
 		return None
 
@@ -203,7 +205,7 @@ def find_device():
 	i = 0
 	while len(device_list) != 1:
 		for port in serial.tools.list_ports.comports():
-			if port.vid == 9025:
+			if port.vid == 9025 or port.vid == 0x03eb:
 				board_found = board_detection(port)
 				if board_found != None:
 					print('{} found'.format(board_found['board_name']))
