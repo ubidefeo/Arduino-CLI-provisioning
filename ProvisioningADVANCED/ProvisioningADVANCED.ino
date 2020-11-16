@@ -184,7 +184,7 @@ void waitForMessage() {
 void checkMessageEnd() {
 	if (Serial.available() >= sizeof(msgEnd)) {
 		uint8_t msgEndBuffer[2];
-		Serial.readBytes(msgEndBuffer, sizeof(msgEnd));
+		Serial.readBytes((char*)msgEndBuffer, sizeof(msgEnd));
 		if (memcmp(msgEndBuffer, msgEnd, sizeof(msgEnd)) == 0) {
 			Serial1.println("message END");
 			if (processMessage() == ERROR::CRC_FAIL) {
