@@ -41,7 +41,7 @@ enum class COMMAND {
 	RECONSTRUCT_CERT
 
 };
-enum class ERROR : uint8_t{
+enum class ERROR : uint8_t {
 	NONE = 0,
 	SYNC,
 	LOCK_FAIL,
@@ -65,8 +65,8 @@ enum class RESPONSE {
 #define MAX_PAYLOAD_LENGTH 130
 #define CRC_SIZE 2
 uint8_t
-		payloadBuffer[MAX_PAYLOAD_LENGTH +
-									CRC_SIZE]; // max 64 bytes will be stored before next round
+payloadBuffer[MAX_PAYLOAD_LENGTH +
+							CRC_SIZE]; // max 64 bytes will be stored before next round
 uint8_t msgStart[] = {0x55, 0xaa};
 uint8_t msgEnd[] = {0xaa, 0x55};
 MESSAGE_TYPE msgType = MESSAGE_TYPE::NONE;
@@ -90,7 +90,7 @@ enum class MACHINE_STATE {
 
 
 MACHINE_STATE machineState = MACHINE_STATE::IDLE;
-char deviceIDBytes[72];
+uint8_t deviceIDBytes[72];
 String deviceIDstring;
 String csr;
 
@@ -106,25 +106,17 @@ String signature;
 
 void setup() {
 	Serial.begin(57600);
-	Serial1.begin(9600);
-	delay(2000);
+	Serial1.begin(115200);
 	Serial1.println("Checking Crypto-chip...");
 	uint8_t cryptoInitOK = cryptoInit();
 	Serial1.println("DONE");
-	
-
-	delay(1000);
 #ifndef EXCLUDE_CODE
-	
-	
-	
+
+
+
 #endif
-	delay(2000);
 	serialNumber = ECCX08.serialNumber();
 	Serial1.println(serialNumber);
-
-	
-	
 }
 
 void loop() {
@@ -132,7 +124,7 @@ void loop() {
 		waitForMessage();
 	}
 	if (machineState == MACHINE_STATE::RECEIVING_PAYLOAD) {
-		payloadBuffer[msgByteIndex] = Serial.read();
+		payloadBuffer[msgByteIndex] = (uint8_t)Serial.read();
 		Serial1.print(payloadBuffer[msgByteIndex], HEX);
 		Serial1.print(" ");
 		msgByteIndex++;
@@ -147,17 +139,16 @@ void loop() {
 }
 
 void waitForMessage() {
-	// Serial1.println(Serial.available());
 	if (Serial.available() >= minMessageLength) {
-		char msgStartBuffer[2];
-		char byteIn;
+		uint8_t msgStartBuffer[2];
+		uint8_t byteIn;
 		bool msgStartByteOK = false;
-		while(!msgStartByteOK){
-			byteIn = Serial.read();
-			if(byteIn == msgStart[0]){
+		while (!msgStartByteOK && Serial.available()) {
+			byteIn = (uint8_t)Serial.read();
+			if (byteIn == msgStart[0]) {
 				msgStartBuffer[0] = byteIn;
-				byteIn = Serial.read();
-				if(byteIn == msgStart[1]){
+				byteIn = (uint8_t)Serial.read();
+				if (byteIn == msgStart[1]) {
 					msgStartBuffer[1] = byteIn;
 					msgStartByteOK = true;
 				}
@@ -168,8 +159,8 @@ void waitForMessage() {
 		if (memcmp(msgStartBuffer, msgStart, sizeof(msgStart)) == 0) {
 			Serial1.println("message START");
 			msgType = (MESSAGE_TYPE)Serial.read();
-			uint8_t lengthH = Serial.read();
-			uint8_t lengthL = Serial.read();
+			uint8_t lengthH = (uint8_t)Serial.read();
+			uint8_t lengthL = (uint8_t)Serial.read();
 			Serial1.print(lengthH);
 			Serial1.print(" - ");
 			Serial1.println(lengthL);
@@ -192,11 +183,11 @@ void waitForMessage() {
 }
 void checkMessageEnd() {
 	if (Serial.available() >= sizeof(msgEnd)) {
-		char msgEndBuffer[2];
+		uint8_t msgEndBuffer[2];
 		Serial.readBytes(msgEndBuffer, sizeof(msgEnd));
 		if (memcmp(msgEndBuffer, msgEnd, sizeof(msgEnd)) == 0) {
 			Serial1.println("message END");
-			if(processMessage() == ERROR::CRC_FAIL){
+			if (processMessage() == ERROR::CRC_FAIL) {
 				Serial1.println("ERROR:: CRC FAIL");
 				sendData(MESSAGE_TYPE::RESPONSE, (char*)RESPONSE::NACK, 1);
 			}
@@ -220,7 +211,7 @@ ERROR processMessage() {
 
 		Serial1.print("COMPUTED CRC: ");
 		Serial1.println(computedCRC, HEX);
-		if(receivedCRC != computedCRC) return ERROR::CRC_FAIL;
+		if (receivedCRC != computedCRC) return ERROR::CRC_FAIL;
 		Serial1.println("CRC aligned");
 		checkSumOK = true;
 	}
@@ -228,38 +219,38 @@ ERROR processMessage() {
 	if (msgType == MESSAGE_TYPE::COMMAND) {
 		processCommand();
 	}
-	if(msgType == MESSAGE_TYPE::DATA){
+	if (msgType == MESSAGE_TYPE::DATA) {
 		processRawData(checkSumOK);
 	}
-
+	return ERROR::NONE;
 }
 
 void processCommand() {
 	Serial1.print("%%%%% ");
 	Serial1.println(">> processing command");
 	COMMAND cmdCode = (COMMAND)payloadBuffer[0];
-	if(cmdCode == COMMAND::GET_SKETCH_INFO){
+	if (cmdCode == COMMAND::GET_SKETCH_INFO) {
 		Serial1.println("get sketch info");
 		char response[] = {char(RESPONSE::ACK)};
 		sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 	}
 
-	if(cmdCode == COMMAND::GET_CSR){
+	if (cmdCode == COMMAND::GET_CSR) {
 		// extract payload from [1] to [payloadLength]
 		// this will be the device_id used to generate a valid CSR
 		Serial1.println("get CSR");
-		for(uint8_t i = 1; i < msgLength - CRC_SIZE; i++){
-			deviceIDBytes[i-1] = payloadBuffer[i];
+		for (uint8_t i = 1; i < msgLength - CRC_SIZE; i++) {
+			deviceIDBytes[i - 1] = payloadBuffer[i];
 		}
-		
+
 		// clear device ID string
 		// this will be sent to the host
 		deviceIDstring = "";
 		Serial1.print("Device ID from host: ");
 		char charBuffer[2];
-		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
+		for (uint8_t i = 0; i < msgLength - CRC_SIZE - 1; i++) {
 			Serial1.print(deviceIDBytes[i], HEX);
-			sprintf(charBuffer,"%02x", deviceIDBytes[i]);
+			sprintf(charBuffer, "%02x", deviceIDBytes[i]);
 			deviceIDstring += charBuffer;//String(deviceIDBytes[i], 16);
 			//deviceIDstring += deviceIDBytes[i];
 		}
@@ -268,15 +259,15 @@ void processCommand() {
 		Serial1.print("request for CSR with device ID ");
 		Serial1.println(deviceIDstring);
 
-		if(generateCSR() == ERROR::CSR_GEN_SUCCESS){
+		if (generateCSR() == ERROR::CSR_GEN_SUCCESS) {
 			sendData(MESSAGE_TYPE::DATA, csr.c_str(), csr.length());
 			Serial1.println("CSR GENERATED ON BOARD");
-		}else{
+		} else {
 			Serial1.println("SOMETHING WENT WRONG");
-			while(1);
+			while (1);
 		}
 	}
-	if(cmdCode == COMMAND::BEGIN_STORAGE){
+	if (cmdCode == COMMAND::BEGIN_STORAGE) {
 		Serial1.println("begin storage");
 		if (!ECCX08.writeSlot(deviceIdSlot, (const byte*)deviceIDBytes, sizeof(deviceIDBytes))) {
 			Serial1.println("Error storing device id!");
@@ -290,23 +281,23 @@ void processCommand() {
 			sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 			return;
 		}
-			char response[] = {char(RESPONSE::ACK)};
-			sendData(MESSAGE_TYPE::RESPONSE, response, 1);
+		char response[] = {char(RESPONSE::ACK)};
+		sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 	}
 
 
-	if(cmdCode == COMMAND::SET_YEAR){
+	if (cmdCode == COMMAND::SET_YEAR) {
 		Serial1.println("set year");
 		char yearBytes[4];
 		String yearString;
-		for(uint8_t i = 1; i < msgLength - CRC_SIZE; i++){
-			yearBytes[i-1] = payloadBuffer[i];
+		for (uint8_t i = 1; i < msgLength - CRC_SIZE; i++) {
+			yearBytes[i - 1] = payloadBuffer[i];
 		}
 		Serial1.print("Year from host: ");
 		char charBuffer[2];
-		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
+		for (uint8_t i = 0; i < msgLength - CRC_SIZE - 1; i++) {
 			Serial1.print(yearBytes[i], HEX);
-			sprintf(charBuffer,"%d", yearBytes[i]);
+			sprintf(charBuffer, "%d", yearBytes[i]);
 			yearString += String(yearBytes[i]);//String(deviceIDBytes[i], 16);
 		}
 
@@ -319,18 +310,18 @@ void processCommand() {
 		sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 
 	}
-	if(cmdCode == COMMAND::SET_MONTH){
+	if (cmdCode == COMMAND::SET_MONTH) {
 		Serial1.println("set month");
 		char monthBytes[4];
 		String monthString;
-		for(uint8_t i = 1; i < msgLength - CRC_SIZE; i++){
-			monthBytes[i-1] = payloadBuffer[i];
+		for (uint8_t i = 1; i < msgLength - CRC_SIZE; i++) {
+			monthBytes[i - 1] = payloadBuffer[i];
 		}
 		Serial1.print("month from host: ");
 		char charBuffer[2];
-		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
+		for (uint8_t i = 0; i < msgLength - CRC_SIZE - 1; i++) {
 			Serial1.print(monthBytes[i], HEX);
-			sprintf(charBuffer,"%d", monthBytes[i]);
+			sprintf(charBuffer, "%d", monthBytes[i]);
 			monthString += String(monthBytes[i]);//String(deviceIDBytes[i], 16);
 		}
 
@@ -344,18 +335,18 @@ void processCommand() {
 
 	}
 
-	if(cmdCode == COMMAND::SET_DAY){
+	if (cmdCode == COMMAND::SET_DAY) {
 		Serial1.println("set day");
 		char dayBytes[4];
 		String dayString;
-		for(uint8_t i = 1; i < msgLength - CRC_SIZE; i++){
-			dayBytes[i-1] = payloadBuffer[i];
+		for (uint8_t i = 1; i < msgLength - CRC_SIZE; i++) {
+			dayBytes[i - 1] = payloadBuffer[i];
 		}
 		Serial1.print("day from host: ");
 		char charBuffer[2];
-		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
+		for (uint8_t i = 0; i < msgLength - CRC_SIZE - 1; i++) {
 			Serial1.print(dayBytes[i], HEX);
-			sprintf(charBuffer,"%d", dayBytes[i]);
+			sprintf(charBuffer, "%d", dayBytes[i]);
 			dayString += String(dayBytes[i]);//String(deviceIDBytes[i], 16);
 		}
 
@@ -369,18 +360,18 @@ void processCommand() {
 
 	}
 
-	if(cmdCode == COMMAND::SET_HOUR){
+	if (cmdCode == COMMAND::SET_HOUR) {
 		Serial1.println("set hour");
 		char hourBytes[4];
 		String hourString;
-		for(uint8_t i = 1; i < msgLength - CRC_SIZE; i++){
-			hourBytes[i-1] = payloadBuffer[i];
+		for (uint8_t i = 1; i < msgLength - CRC_SIZE; i++) {
+			hourBytes[i - 1] = payloadBuffer[i];
 		}
 		Serial1.print("hour from host: ");
 		char charBuffer[2];
-		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
+		for (uint8_t i = 0; i < msgLength - CRC_SIZE - 1; i++) {
 			Serial1.print(hourBytes[i], HEX);
-			sprintf(charBuffer,"%d", hourBytes[i]);
+			sprintf(charBuffer, "%d", hourBytes[i]);
 			hourString += String(hourBytes[i]);//String(deviceIDBytes[i], 16);
 		}
 
@@ -394,18 +385,18 @@ void processCommand() {
 
 	}
 
-	if(cmdCode == COMMAND::SET_VALIDITY){
+	if (cmdCode == COMMAND::SET_VALIDITY) {
 		Serial1.println("set validity");
 		char validityBytes[4];
 		String validityString;
-		for(uint8_t i = 1; i < msgLength - CRC_SIZE; i++){
-			validityBytes[i-1] = payloadBuffer[i];
+		for (uint8_t i = 1; i < msgLength - CRC_SIZE; i++) {
+			validityBytes[i - 1] = payloadBuffer[i];
 		}
 		Serial1.print("validity from host: ");
 		char charBuffer[2];
-		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
+		for (uint8_t i = 0; i < msgLength - CRC_SIZE - 1; i++) {
 			Serial1.print(validityBytes[i], HEX);
-			sprintf(charBuffer,"%d", validityBytes[i]);
+			sprintf(charBuffer, "%d", validityBytes[i]);
 			validityString += String(validityBytes[i]);//String(deviceIDBytes[i], 16);
 		}
 
@@ -419,24 +410,24 @@ void processCommand() {
 
 	}
 
-	if(cmdCode == COMMAND::SET_CERT_SERIAL){
+	if (cmdCode == COMMAND::SET_CERT_SERIAL) {
 		// extract payload from [1] to [payloadLength]
 		// this will be the device_id used to generate a valid CSR
 		Serial1.println("set CERT Serial");
 		byte certSerialBytes[msgLength - CRC_SIZE];
 
-		for(uint8_t i = 1; i < msgLength - CRC_SIZE; i++){
-			certSerialBytes[i-1] = payloadBuffer[i];
+		for (uint8_t i = 1; i < msgLength - CRC_SIZE; i++) {
+			certSerialBytes[i - 1] = payloadBuffer[i];
 		}
-		
+
 		// clear device ID string
 		// this will be sent to the host
 		String certSerialString = "";
 		Serial1.print("Serial Number from host: ");
 		char charBuffer[2];
-		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
+		for (uint8_t i = 0; i < msgLength - CRC_SIZE - 1; i++) {
 			Serial1.print(certSerialBytes[i], HEX);
-			sprintf(charBuffer,"%02X", certSerialBytes[i]);
+			sprintf(charBuffer, "%02X", certSerialBytes[i]);
 			certSerialString += charBuffer;//String(deviceIDBytes[i], 16);
 		}
 
@@ -447,24 +438,24 @@ void processCommand() {
 		char response[] = {char(RESPONSE::ACK)};
 		sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 	}
-	if(cmdCode == COMMAND::SET_AUTH_KEY){
+	if (cmdCode == COMMAND::SET_AUTH_KEY) {
 		// extract payload from [1] to [payloadLength]
 		// this will be the device_id used to generate a valid CSR
 		Serial1.println("set Auth Key ");
 		byte authKeyBytes[msgLength - CRC_SIZE];
 
-		for(uint8_t i = 1; i < msgLength - CRC_SIZE; i++){
-			authKeyBytes[i-1] = payloadBuffer[i];
+		for (uint8_t i = 1; i < msgLength - CRC_SIZE; i++) {
+			authKeyBytes[i - 1] = payloadBuffer[i];
 		}
-		
+
 		// clear device ID string
 		// this will be sent to the host
 		String authKeyString = "";
 		Serial1.print("Authority Key from host: ");
 		char charBuffer[2];
-		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
+		for (uint8_t i = 0; i < msgLength - CRC_SIZE - 1; i++) {
 			Serial1.print(authKeyBytes[i], HEX);
-			sprintf(charBuffer,"%02X", authKeyBytes[i]);
+			sprintf(charBuffer, "%02X", authKeyBytes[i]);
 			authKeyString += charBuffer;//String(deviceIDBytes[i], 16);
 		}
 
@@ -474,26 +465,26 @@ void processCommand() {
 
 		char response[] = {char(RESPONSE::ACK)};
 		sendData(MESSAGE_TYPE::RESPONSE, response, 1);
-		
+
 	}
-	if(cmdCode == COMMAND::SET_SIGNATURE){
+	if (cmdCode == COMMAND::SET_SIGNATURE) {
 		// extract payload from [1] to [payloadLength]
 		// this will be the device_id used to generate a valid CSR
 		Serial1.println("set Signature ");
 		byte signatureBytes[msgLength - CRC_SIZE];
 
-		for(uint8_t i = 1; i < msgLength - CRC_SIZE; i++){
-			signatureBytes[i-1] = payloadBuffer[i];
+		for (uint8_t i = 1; i < msgLength - CRC_SIZE; i++) {
+			signatureBytes[i - 1] = payloadBuffer[i];
 		}
-		
+
 		// clear device ID string
 		// this will be sent to the host
 		String signatureString = "";
 		Serial1.print("Signature from host: ");
 		char charBuffer[2];
-		for(uint8_t i = 0; i < msgLength - CRC_SIZE -1; i++){
+		for (uint8_t i = 0; i < msgLength - CRC_SIZE - 1; i++) {
 			Serial1.print(signatureBytes[i], HEX);
-			sprintf(charBuffer,"%02X", signatureBytes[i]);
+			sprintf(charBuffer, "%02X", signatureBytes[i]);
 			signatureString += charBuffer;//String(deviceIDBytes[i], 16);
 		}
 
@@ -503,9 +494,9 @@ void processCommand() {
 
 		char response[] = {char(RESPONSE::ACK)};
 		sendData(MESSAGE_TYPE::RESPONSE, response, 1);
-		
+
 	}
-	if(cmdCode == COMMAND::END_STORAGE){
+	if (cmdCode == COMMAND::END_STORAGE) {
 		Serial1.println("end storage");
 		if (!ECCX08Cert.endStorage()) {
 			Serial1.println("Error storing ECCX08 compressed cert!");
@@ -513,13 +504,13 @@ void processCommand() {
 			sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 			return;
 		}
-		
+
 		char response[] = {char(RESPONSE::ACK)};
 		sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 	}
 
 
-	if(cmdCode == COMMAND::RECONSTRUCT_CERT){
+	if (cmdCode == COMMAND::RECONSTRUCT_CERT) {
 
 		if (!ECCX08Cert.beginReconstruction(keySlot, compressedCertSlot, serialNumberAndAuthorityKeyIdentifierSlot)) {
 			Serial1.println("Error starting ECCX08 cert reconstruction!");
@@ -527,7 +518,7 @@ void processCommand() {
 			sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 			return;
 		}
-	
+
 		ECCX08Cert.setIssuerCountryName("US");
 		ECCX08Cert.setIssuerOrganizationName("Arduino LLC US");
 		ECCX08Cert.setIssuerOrganizationalUnitName("IT");
@@ -552,7 +543,7 @@ void processCommand() {
 				Serial1.print('0');
 			}
 			Serial1.print(b, HEX);
-			
+
 		}
 		Serial1.println();
 		char response[] = {char(RESPONSE::ACK)};
@@ -581,7 +572,7 @@ void processRawData(bool checkSumOK) {
 	}
 }
 
-void sendData(MESSAGE_TYPE _msgType, const char* _msgPayload, uint16_t _payloadSize){
+void sendData(MESSAGE_TYPE _msgType, const char* _msgPayload, uint16_t _payloadSize) {
 	Serial1.print("payload size: ");
 	Serial1.print(_payloadSize);
 	Serial1.print(" [");
@@ -603,7 +594,7 @@ void sendData(MESSAGE_TYPE _msgType, const char* _msgPayload, uint16_t _payloadS
 
 }
 
-void sendResponse(){
+void sendResponse() {
 
 }
 void changeState(MACHINE_STATE _newState) {
@@ -614,8 +605,8 @@ void changeState(MACHINE_STATE _newState) {
 	if (_newState == MACHINE_STATE::RECEIVING_PAYLOAD) {
 		msgByteIndex = 0;
 	}
-	if (_newState == MACHINE_STATE::IDLE){
-		
+	if (_newState == MACHINE_STATE::IDLE) {
+
 	}
 	machineState = _newState;
 }
@@ -646,8 +637,8 @@ ERROR cryptoLock() {
 	}
 }
 
-ERROR generateCSR(){
-	if(!ECCX08.locked()){
+ERROR generateCSR() {
+	if (!ECCX08.locked()) {
 		Serial1.println("Chip is not locked");
 		return ERROR::LOCK_FAIL;
 	}
@@ -663,8 +654,8 @@ ERROR generateCSR(){
 	// ECCX08CSR.setLocalityName("Amsterdam");
 	// ECCX08CSR.setOrganizationName("Arduino");
 	// ECCX08CSR.setOrganizationalUnitName("Tooling Team");
-	
-	
+
+
 	ECCX08CSR.setCommonName(deviceIDstring);
 	csr = ECCX08CSR.end();
 	if (!csr) {
@@ -673,6 +664,6 @@ ERROR generateCSR(){
 	}
 	Serial1.println(csr.length());
 	Serial1.println(csr);
-	
+
 	return ERROR::CSR_GEN_SUCCESS;
 }
