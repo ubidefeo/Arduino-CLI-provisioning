@@ -523,6 +523,7 @@ void processCommand() {
 		ECCX08Cert.setIssuerOrganizationName("Arduino LLC US");
 		ECCX08Cert.setIssuerOrganizationalUnitName("IT");
 		ECCX08Cert.setIssuerCommonName("Arduino");
+		ECCX08Cert.setSubjectCommonName(deviceIDBytes);
 
 		if (!ECCX08Cert.endReconstruction()) {
 			Serial1.println("Error reconstructing ECCX08 compressed cert!");
