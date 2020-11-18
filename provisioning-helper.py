@@ -106,7 +106,7 @@ def parse_response_data(r_data, failure_error):
 	#print(payload_bytes)
 	payload_computed_CRC = _CRC_FUNC(bytearray(payload_bytes))
 	#print(f"computed CRC: {hex(payload_computed_CRC)}")
-	payload_received_CRC = r_data[len(r_data) - 4] << 8 | r_data[len(r_data) - 3]	
+	payload_received_CRC = r_data[len(r_data) - 4] << 8 | r_data[len(r_data) - 3]   
 	#print(f"received CRC: {hex(payload_received_CRC)}")
 	if(payload_computed_CRC == payload_received_CRC):
 		return payload_bytes;
@@ -136,7 +136,7 @@ def send_command(command, payload = bytearray([]), encode = False, verbose_messa
 	if(parsed_response != ERROR.CRC_FAIL):
 		print(f"ACK: {verbose_message}")
 		return parsed_response
-	#	certificate = send_csr(token, csr, device_id)
+	#   certificate = send_csr(token, csr, device_id)
 	else:
 		print("data corrupted")
 		print("Please relaunch the script to retry")
@@ -253,6 +253,9 @@ def install_sketch():
 	print("Installing ArduinoECCX08 library")
 	installing_lib = subprocess.Popen(["arduino-cli","lib","install","ArduinoECCX08"], stdout=subprocess.PIPE)
 	installing_lib.wait()
+	print("Installing Arduino STL library")
+	installing_lib = subprocess.Popen(["arduino-cli","lib","install","ArduinoSTL"], stdout=subprocess.PIPE)
+	installing_lib.wait()
 	print("Installing uCRC16Lib library")
 	installing_lib = subprocess.Popen(["arduino-cli","lib","install","uCRC16Lib"], stdout=subprocess.PIPE)
 	installing_lib.wait()
@@ -316,7 +319,7 @@ device_id = add_device(token, device_name, device_list[0]['fqbn'], device_list[0
 print(f"IoT Cloud generated Device ID: {device_id}")
 
 serial_port = serial_connect()
-time.sleep(2)
+time.sleep(5)
 
 sketch_unknown = True
 while(sketch_unknown):
@@ -348,19 +351,19 @@ print(f"REQUESTING CSR for Device with ID: {device_id}")
 # response_data = []
 
 # while(serial_port.in_waiting > 0):
-# 	response_data.append(int.from_bytes(serial_port.read(), "little"))
+#   response_data.append(int.from_bytes(serial_port.read(), "little"))
 
 # print(response_data)
 # csr = ""
 # parsed_response = parse_response_data(response_data, ERROR.CRC_FAIL)
 # if(parsed_response != ERROR.CRC_FAIL):
-# 	print("CSR received")
-# 	csr = bytearray(parsed_response).decode('utf-8')
-# 	print(csr)
-# #	certificate = send_csr(token, csr, device_id)
+#   print("CSR received")
+#   csr = bytearray(parsed_response).decode('utf-8')
+#   print(csr)
+# # certificate = send_csr(token, csr, device_id)
 # else:
-# 	print("CSR data corrupted")
-# 	print("Please relaunch the script to retry")
+#   print("CSR data corrupted")
+#   print("Please relaunch the script to retry")
 	
 print(device_id)
 print(device_id.encode())
@@ -368,6 +371,8 @@ print(bytearray(device_id.encode()))
 print(list(bytearray(device_id.encode())))
 
 csr = send_command(command = COMMAND.GET_CSR, payload = list(bytearray(device_id.encode())), encode = False, verbose_message = "CSR Obtained")
+print(csr) 
+
 if(csr != ERROR.CRC_FAIL):
 	print("CSR received")
 	csr = bytearray(csr).decode('utf-8')
