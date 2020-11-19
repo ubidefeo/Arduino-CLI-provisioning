@@ -109,19 +109,15 @@ void setup() {
   Serial1.begin(115200);
   uint8_t cryptoInitOK = cryptoInit();
   if (!cryptoInit()) {
-    Serial.println("FAILED TO DETECT CRYPTO ELEMENT");
     Serial1.println("FAILED TO DETECT CRYPTO ELEMENT");
     while (1);
   } else {
-    Serial.println("Crypto-element installed");
     Serial1.println("Crypto-element installed");
   }
   if (cryptoLock() != ERROR::LOCK_SUCCESS) {
-    Serial.println("FAILED TO LOCK CRYPTO ELEMENT");
     Serial1.println("FAILED TO LOCK CRYPTO ELEMENT");
     while (1);
   } else {
-    Serial.println("Crypto-element locked");
     Serial1.println("Crypto-element installed");
   }
 
@@ -646,6 +642,7 @@ ERROR cryptoLock() {
     }
     return ERROR::LOCK_SUCCESS;
   }
+  return ERROR::LOCK_SUCCESS;
 }
 
 ERROR generateCSR() {
