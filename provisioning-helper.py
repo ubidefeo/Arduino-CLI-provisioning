@@ -15,7 +15,7 @@ import argparse
 from enum import Enum, auto
 import os
 
-PROVISIONING_SKETCH_RESPONSE = [0x55, 0xaa, 0x01, 0x01, 0xff, 0xaa, 0x55]
+SERIAL_BAUDRATE = 115200
 MAX_SERIAL_BUFFER = 128
 MIN_MESSAGE_LENGTH = 10
 
@@ -273,7 +273,7 @@ def serial_connect():
     while waiting_for_serial:
         try:
             print(f"Attempting connection to {device_list[0]['board_name']} on port {device_list[0]['board_port']}")
-            serial_port_handler = serial.Serial(device_list[0]['board_port'], 57600, write_timeout = 5)
+            serial_port_handler = serial.Serial(device_list[0]['board_port'], SERIAL_BAUDRATE, write_timeout = 5)
             waiting_for_serial = False
         except:
             print("cannot connect to serial")
