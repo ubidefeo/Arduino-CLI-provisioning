@@ -199,6 +199,8 @@ def board_detection(port):
         return {'board_port': port.device, 'board_name': port.product, 'type': 'mkrwan1310', 'fqbn': 'arduino:samd:mkrwan1310', 'serial_number': port.serial_number}
     elif port.pid in [int('0x2145', 16), int('0x2145', 16)]:
         return {'board_port': port.device, 'board_name': port.product, 'type': 'nano_33_iot', 'fqbn': 'arduino:samd:nano_33_iot', 'serial_number': port.serial_number}
+    elif port.pid in [int('0x2145', 16), int('0x005e', 16)]:
+         return {'board_port': port.device, 'board_name': port.product, 'type': 'nanorp2040connect', 'fqbn': 'arduino:mbed:nanorp2040connect', 'serial_number': port.serial_number}
     else:
         return None
 
