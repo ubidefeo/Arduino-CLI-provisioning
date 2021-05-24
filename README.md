@@ -20,7 +20,7 @@ Heavily tested on Mac OS and Linux
     - Arduino Portenta H7
 
 ### Usage
-1. Go to [https://create.arduino.cc/iot/things](https://create.arduino.cc/iot/integrations) and generate the API Client ID and Secret ID.
+1. Go to [https://create.arduino.cc/iot/integrations](https://create.arduino.cc/iot/integrations) and generate the API Client ID and Secret ID.
 The script looks for a configuration file in the user's home directory. This file, named `ArduinoIoTCloudAPI_credentials.json`, should contain your API Client ID and Secret ID as as follows
 ```json
 {
