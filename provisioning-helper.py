@@ -313,7 +313,7 @@ def upload_sketch(board):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Arduino IoT Cloud Crypto-Element Provisioning Assistant')
-    parser.add_argument('--api_credentials_file', help='Provide the file containing Client ID and API Secret. Example: --api_credentials_file=/home/myuser/apicredentials.json')
+    parser.add_argument('--api_credentials_file', help='Provide the path to the file containing Client ID and API Secret. Example: --api_credentials_file=/home/myuser/ArduinoIoTCloudAPI_credentials.json')
     parser.add_argument('--device_name', help='Choose the name your device will have in your dashboard. Example: --device_name=myNanoIoT')
     args = parser.parse_args()
 
