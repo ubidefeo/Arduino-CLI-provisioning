@@ -4,18 +4,20 @@ Arduino IoT Cloud "Getting Started" via command line
 Based off initial work by Luigi Gubello (@luigigubello).
 Greatly influenced by Martino Facchin (@facchinm).
 
-**NOTE:** Because of how Windows tends to rename Serial ports when you don't look at it, it is advised to manually upload the `ProvisioningADVANCED` sketch rather than letting the Python script do that automatically.
-Works well on Mac OS and Linux assuming you have the required components
+**NOTE:** 
+Heavily tested on Mac OS and Linux
 
 ### Pre-requirements
-* Python 3.x
+* Python 3.5+
 * You will need some Python modules. To install them run `pip install -r requirements.txt`
 * Arduino CLI, install following [the instruction](https://arduino.github.io/arduino-cli/installation/)
-* Install the following libraries for Arduino using the `arduino-cli lib install <lib_name>` (e.g.: `arduino-cli lib install ucrc16lib`)
-    - `ucrc16lib`
-    - `ArduinoIoTCloud`
-    - `ArduinoECCX08`
 * An Arduino board with ECCX08 Cryptographic Element
+    - Arduino MKR 1000
+    - Arduino MKR WiFi 1010
+    - Arduino MKR GSM 1400
+    - Arduino Nano 33 IoT
+    - Arduino Nano RP2040 Connect
+    - Arduino Portenta H7
 
 ### Usage
 1. Go to [https://create.arduino.cc/iot/things](https://create.arduino.cc/iot/things) and generate the API Client ID and Secret ID.
