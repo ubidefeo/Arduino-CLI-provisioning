@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "cli-getting-started-master"
+version = "0.1.0"
+description = "provision an Arduino board's ECCx08 using Arduino CLI and IoT Cloud API"
+authors = ["ubi de feo <u.defeo@arduino.cc>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+click = "^7.1.2"
+requests = "^2.25.1"
+serial = "^0.0.97"
+pyserial = "^3.5"
+crcmod = "^1.7"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

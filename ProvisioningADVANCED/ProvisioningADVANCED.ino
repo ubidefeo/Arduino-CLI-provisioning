@@ -41,7 +41,7 @@ enum class COMMAND {
   RECONSTRUCT_CERT
 
 };
-enum class ERROR : uint8_t {
+enum class PROVISIONING_ERROR : uint8_t {
   NONE = 0,
   SYNC,
   LOCK_FAIL,
@@ -56,10 +56,10 @@ enum class ERROR : uint8_t {
 };
 
 enum class RESPONSE {
-  NONE = 1,
-  ACK,
-  NACK,
-  ERROR
+  RESPONSE_NONE = 1,
+  RESPONSE_ACK,
+  RESPONSE_NACK,
+  RESPONSE_ERROR
 };
 
 #define MAX_PAYLOAD_LENGTH 130
@@ -114,7 +114,7 @@ void setup() {
   } else {
     Serial1.println("Crypto-element installed");
   }
-  if (cryptoLock() != ERROR::LOCK_SUCCESS) {
+  if (cryptoLock() != PROVISIONING_ERROR::LOCK_SUCCESS) {
     Serial1.println("FAILED TO LOCK CRYPTO ELEMENT");
     while (1);
   } else {
@@ -128,6 +128,7 @@ void setup() {
 void loop() {
   if (machineState == MACHINE_STATE::IDLE) {
     waitForMessage();
+
   }
   if (machineState == MACHINE_STATE::RECEIVING_PAYLOAD) {
     payloadBuffer[msgByteIndex] = (uint8_t)Serial.read();
@@ -193,9 +194,9 @@ void checkMessageEnd() {
     Serial.readBytes((char*)msgEndBuffer, sizeof(msgEnd));
     if (memcmp(msgEndBuffer, msgEnd, sizeof(msgEnd)) == 0) {
       Serial1.println("message END");
-      if (processMessage() == ERROR::CRC_FAIL) {
+      if (processMessage() == PROVISIONING_ERROR::CRC_FAIL) {
         Serial1.println("ERROR:: CRC FAIL");
-        sendData(MESSAGE_TYPE::RESPONSE, (char*)RESPONSE::NACK, 1);
+        sendData(MESSAGE_TYPE::RESPONSE, (char*)RESPONSE::RESPONSE_NACK, 1);
       }
       //delay(2000);
       changeState(MACHINE_STATE::IDLE);
@@ -203,7 +204,7 @@ void checkMessageEnd() {
   }
 }
 
-ERROR processMessage() {
+PROVISIONING_ERROR processMessage() {
   bool checkSumOK = false;
   if (msgLength > 0) {
     // checksum verification
@@ -217,7 +218,7 @@ ERROR processMessage() {
 
     Serial1.print("COMPUTED CRC: ");
     Serial1.println(computedCRC, HEX);
-    if (receivedCRC != computedCRC) return ERROR::CRC_FAIL;
+    if (receivedCRC != computedCRC) return PROVISIONING_ERROR::CRC_FAIL;
     Serial1.println("CRC aligned");
     checkSumOK = true;
   }
@@ -228,7 +229,7 @@ ERROR processMessage() {
   if (msgType == MESSAGE_TYPE::DATA) {
     processRawData(checkSumOK);
   }
-  return ERROR::NONE;
+  return PROVISIONING_ERROR::NONE;
 }
 
 void processCommand() {
@@ -237,7 +238,7 @@ void processCommand() {
   COMMAND cmdCode = (COMMAND)payloadBuffer[0];
   if (cmdCode == COMMAND::GET_SKETCH_INFO) {
     Serial1.println("get sketch info");
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
   }
 
@@ -265,7 +266,7 @@ void processCommand() {
     Serial1.print("request for CSR with device ID ");
     Serial1.println(deviceIDstring);
 
-    if (generateCSR() == ERROR::CSR_GEN_SUCCESS) {
+    if (generateCSR() == PROVISIONING_ERROR::CSR_GEN_SUCCESS) {
       sendData(MESSAGE_TYPE::DATA, csr.c_str(), csr.length());
       Serial1.println("CSR GENERATED ON BOARD");
     } else {
@@ -277,17 +278,17 @@ void processCommand() {
     Serial1.println("begin storage");
     if (!ECCX08.writeSlot(deviceIdSlot, (const byte*)deviceIDBytes, sizeof(deviceIDBytes))) {
       Serial1.println("Error storing device id!");
-      char response[] = {char(RESPONSE::ERROR)};
+      char response[] = {char(RESPONSE::RESPONSE_ERROR)};
       sendData(MESSAGE_TYPE::RESPONSE, response, 1);
       return;
     }
     if (!ECCX08Cert.beginStorage(compressedCertSlot, serialNumberAndAuthorityKeyIdentifierSlot)) {
       Serial1.println("Error starting ECCX08 storage!");
-      char response[] = {char(RESPONSE::ERROR)};
+      char response[] = {char(RESPONSE::RESPONSE_ERROR)};
       sendData(MESSAGE_TYPE::RESPONSE, response, 1);
       return;
     }
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
   }
 
@@ -312,7 +313,7 @@ void processCommand() {
     Serial1.println(yearString);
     ECCX08Cert.setIssueYear(yearString.toInt());
 
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 
   }
@@ -336,7 +337,7 @@ void processCommand() {
     Serial1.println(monthString);
     ECCX08Cert.setIssueMonth(monthString.toInt());
 
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 
   }
@@ -361,7 +362,7 @@ void processCommand() {
     Serial1.println(dayString);
     ECCX08Cert.setIssueDay(dayString.toInt());
 
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 
   }
@@ -386,7 +387,7 @@ void processCommand() {
     Serial1.println(hourString);
     ECCX08Cert.setIssueHour(hourString.toInt());
 
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 
   }
@@ -411,7 +412,7 @@ void processCommand() {
     Serial1.println(validityString);
     ECCX08Cert.setExpireYears(validityString.toInt());
 
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 
   }
@@ -441,7 +442,7 @@ void processCommand() {
 
     ECCX08Cert.setSerialNumber(certSerialBytes);
 
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
   }
   if (cmdCode == COMMAND::SET_AUTH_KEY) {
@@ -469,7 +470,7 @@ void processCommand() {
 
     ECCX08Cert.setAuthorityKeyIdentifier(authKeyBytes);
 
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 
   }
@@ -498,7 +499,7 @@ void processCommand() {
 
     ECCX08Cert.setSignature(signatureBytes);
 
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
 
   }
@@ -506,12 +507,12 @@ void processCommand() {
     Serial1.println("end storage");
     if (!ECCX08Cert.endStorage()) {
       Serial1.println("Error storing ECCX08 compressed cert!");
-      char response[] = {char(RESPONSE::ERROR)};
+      char response[] = {char(RESPONSE::RESPONSE_ERROR)};
       sendData(MESSAGE_TYPE::RESPONSE, response, 1);
       return;
     }
 
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
   }
 
@@ -520,7 +521,7 @@ void processCommand() {
 
     if (!ECCX08Cert.beginReconstruction(keySlot, compressedCertSlot, serialNumberAndAuthorityKeyIdentifierSlot)) {
       Serial1.println("Error starting ECCX08 cert reconstruction!");
-      char response[] = {char(RESPONSE::ERROR)};
+      char response[] = {char(RESPONSE::RESPONSE_ERROR)};
       sendData(MESSAGE_TYPE::RESPONSE, response, 1);
       return;
     }
@@ -533,7 +534,7 @@ void processCommand() {
 
     if (!ECCX08Cert.endReconstruction()) {
       Serial1.println("Error reconstructing ECCX08 compressed cert!");
-      char response[] = {char(RESPONSE::ERROR)};
+      char response[] = {char(RESPONSE::RESPONSE_ERROR)};
       sendData(MESSAGE_TYPE::RESPONSE, response, 1);
       return;
     }
@@ -553,7 +554,7 @@ void processCommand() {
 
     }
     Serial1.println();
-    char response[] = {char(RESPONSE::ACK)};
+    char response[] = {char(RESPONSE::RESPONSE_ACK)};
     sendData(MESSAGE_TYPE::RESPONSE, response, 1);
   }
 
@@ -563,14 +564,14 @@ void processRawData(bool checkSumOK) {
   Serial1.println(">> processing raw data");
 
   if (checkSumOK) {
-    uint8_t resp[] = {0x55, 0xaa, (uint8_t)MESSAGE_TYPE::RESPONSE, 0x01, (uint8_t)RESPONSE::ACK, 0xaa, 0x55};
+    uint8_t resp[] = {0x55, 0xaa, (uint8_t)MESSAGE_TYPE::RESPONSE, 0x01, (uint8_t)RESPONSE::RESPONSE_ACK, 0xaa, 0x55};
     for (uint8_t i = 0; i < sizeof(resp); i++) {
       Serial1.print(resp[i]);
       Serial1.print(" ");
     }
     Serial.write(resp, sizeof(resp));
   } else {
-    uint8_t resp[] = {0x55, 0xaa, (uint8_t)MESSAGE_TYPE::RESPONSE, 0x01, (uint8_t)RESPONSE::NACK, 0xaa, 0x55};
+    uint8_t resp[] = {0x55, 0xaa, (uint8_t)MESSAGE_TYPE::RESPONSE, 0x01, (uint8_t)RESPONSE::RESPONSE_NACK, 0xaa, 0x55};
     for (uint8_t i = 0; i < sizeof(resp); i++) {
       Serial1.print(resp[i]);
       Serial1.print(" ");
@@ -630,32 +631,32 @@ uint8_t cryptoInit() {
   return eccOK;
 }
 
-ERROR cryptoLock() {
+PROVISIONING_ERROR cryptoLock() {
   if (!ECCX08.locked()) {
 
     if (!ECCX08.writeConfiguration(DEFAULT_ECCX08_TLS_CONFIG)) {
-      return ERROR::WRITE_CONFIG_FAIL;
+      return PROVISIONING_ERROR::WRITE_CONFIG_FAIL;
     }
 
     if (!ECCX08.lock()) {
-      return ERROR::LOCK_FAIL;
+      return PROVISIONING_ERROR::LOCK_FAIL;
     }
-    return ERROR::LOCK_SUCCESS;
+    return PROVISIONING_ERROR::LOCK_SUCCESS;
   }
-  return ERROR::LOCK_SUCCESS;
+  return PROVISIONING_ERROR::LOCK_SUCCESS;
 }
 
-ERROR generateCSR() {
+PROVISIONING_ERROR generateCSR() {
   if (!ECCX08.locked()) {
     Serial1.println("Chip is not locked");
-    return ERROR::LOCK_FAIL;
+    return PROVISIONING_ERROR::LOCK_FAIL;
   }
   Serial1.println("CSR generation in progress");
   uint8_t csrSlot = 0;
   //ECCX08Cert.beginCSR(0, true);
   if (!ECCX08CSR.begin(csrSlot, true)) {
     Serial1.println("Error starting CSR generation!");
-    return ERROR::CSR_GEN_FAIL;
+    return PROVISIONING_ERROR::CSR_GEN_FAIL;
   }
   // ECCX08CSR.setCountryName("Netherlands");
   // ECCX08CSR.setStateProvinceName("Noord Holland");
@@ -668,10 +669,10 @@ ERROR generateCSR() {
   csr = ECCX08CSR.end();
   if (!csr) {
     Serial1.println("Error generating CSR!");
-    return ERROR::CSR_GEN_FAIL;
+    return PROVISIONING_ERROR::CSR_GEN_FAIL;
   }
   Serial1.println(csr.length());
   Serial1.println(csr);
 
-  return ERROR::CSR_GEN_SUCCESS;
+  return PROVISIONING_ERROR::CSR_GEN_SUCCESS;
 }
