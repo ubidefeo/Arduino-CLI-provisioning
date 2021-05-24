@@ -1,7 +1,6 @@
 from collections import namedtuple
 from sys import stdout
 import requests
-import getpass
 import json
 from serial.serialutil import SerialException
 import serial.tools.list_ports
@@ -61,8 +60,8 @@ class COMMAND(Enum):
     END_STORAGE = auto()
     RECONSTRUCT_CERT = auto()
 
-# ERRORS
 
+# ERRORS
 
 class ERROR(Enum):
     NONE = 0
@@ -78,43 +77,35 @@ class ERROR(Enum):
     ERROR_NO_DATA = auto()
 
 
+# FUNCTIONS
+
 def compose_message(msg_type, msg_payload):
-    # print(f"type {msg_type}")
     formed_message = bytearray(msg_start)
     formed_message.append(msg_type)
     payload_size = len(msg_payload) + CRC16_SIZE
 
-    # print(f"data size >>> {len(msg_payload)}")
     payload_size_L = (payload_size.to_bytes(2, "big"))[1]
     payload_size_H = (payload_size.to_bytes(2, "big"))[0]
-    # print(f"{hex(payload_size_H)} - {hex(payload_size_L)}")
 
     formed_message.append(payload_size_H)
     formed_message.append(payload_size_L)
     formed_message += bytearray(msg_payload)
     crc = _CRC_FUNC(bytearray(msg_payload))
-    # print(hex(crc))
+
     formed_message.append(((crc >> 8) & 0xff))
     formed_message.append(crc & 0xff)
     formed_message += bytearray(msg_end)
-    # print(f"msg payload: {msg_payload}")
-    # print(f"formed message: {formed_message}")
     return formed_message
 
 
 def parse_response_data(r_data, failure_error):
-    # print("parsing response data")
     if(len(r_data) < 1):
         return ERROR.GENERIC
     msg_length = r_data[3] << 8 | r_data[4]
-    # print(f"incoming data length: {msg_length}")
     payload_bytes = (r_data[5:][:msg_length - CRC16_SIZE])
-    # print(payload_bytes)
     payload_computed_CRC = _CRC_FUNC(bytearray(payload_bytes))
-    # print(f"computed CRC: {hex(payload_computed_CRC)}")
     payload_received_CRC = r_data[len(
         r_data) - 4] << 8 | r_data[len(r_data) - 3]
-    # print(f"received CRC: {hex(payload_received_CRC)}")
     if(payload_computed_CRC == payload_received_CRC):
         return payload_bytes
     else:
@@ -131,7 +122,7 @@ def send_command(command, payload=bytearray([]), encode=False, verbose_message="
         msg_payload += list(bytearray(payload))
 
     serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
-    time.sleep(3)
+    time.sleep(1)
     response_data = []
 
     while(serial_port.in_waiting > 0):
@@ -174,8 +165,6 @@ def add_device(token, device_name, fqbn, type, serial):
     device_id = json.loads(response.text)['id']
     return device_id
 
-# this is the function to concatenate the DEVICE UID and Certificate
-
 
 def send_csr(token, csr, device_id):
     url = 'http://api2.arduino.cc/iot/v2/devices/' + device_id + '/certs'
@@ -188,31 +177,6 @@ def send_csr(token, csr, device_id):
                  }
     response = requests.put(url, headers=headers, data=json.dumps(data_cert))
     return json.loads(response.text)['compressed']
-
-
-# def board_detection(port):
-#     if port.pid in [int('0x8057', 16), int('0x0057', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'nano_33_iot', 'fqbn': 'arduino:samd:nano_33_iot', 'serial_number': port.serial_number}
-#     elif port.pid in [int('0x804e', 16), int('0x004e', 16), int('0x824e', 16), int('0x024e', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'mkr1000', 'fqbn': 'arduino:samd:mkr1000', 'serial_number': port.serial_number}
-#     elif port.pid in [int('0x8054', 16), int('0x0054', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'mkrwifi1010', 'fqbn': 'arduino:samd:mkrwifi1010', 'serial_number': port.serial_number}
-#     elif port.pid in [int('0x8052', 16), int('0x0052', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'mkrgsm1400', 'fqbn': 'arduino:samd:mkrgsm1400', 'serial_number': port.serial_number}
-#     elif port.pid in [int('0x8055', 16), int('0x0055', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'mkrnb1500', 'fqbn': 'arduino:samd:mkrnb1500', 'serial_number': port.serial_number}
-#     elif port.pid in [int('0x8053', 16), int('0x0053', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'mkrwan1300', 'fqbn': 'arduino:samd:mkrwan1300', 'serial_number': port.serial_number}
-#     elif port.pid in [int('0x8059', 16), int('0x0059', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'mkrwan1310', 'fqbn': 'arduino:samd:mkrwan1310', 'serial_number': port.serial_number}
-#     elif port.pid in [int('0x2145', 16), int('0x2145', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'nano_33_iot', 'fqbn': 'arduino:samd:nano_33_iot', 'serial_number': port.serial_number}
-#     elif port.pid in [int('0x2145', 16), int('0x005e', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'nanorp2040connect', 'fqbn': 'arduino:mbed_nano:nanorp2040connect', 'serial_number': port.serial_number}
-#     elif port.pid in [int('0x025B', 16), int('0x035B', 16)]:
-#         return {'board_port': port.device, 'board_name': port.product, 'type': 'Portenta M7', 'fqbn': 'arduino:mbed_portenta:envie_m7', 'serial_number': port.serial_number}
-#     else:
-#         return None
 
 
 def boards_list():
@@ -228,92 +192,23 @@ def boards_list():
         my_board.address = device['address']
         my_board.serial_number = device['serial_number']
         my_board.type = my_board.fqbn.rpartition(':')[2]
-        # print(my_board)
         device_list.append(my_board)
     return device_list
 
 
-# def find_device():
-#     device_list = []
-#     i = 0
-#     while len(device_list) != 1:
-#         for port in serial.tools.list_ports.comports():
-#             # print(f">>> {port.vid}")
-#             if port.vid == 0x2341 or port.vid == 0x03eb:
-#                 board_found = board_detection(port)
-#                 if board_found is not None:
-#                     print('{}({}) found'.format(
-#                         board_found['board_name'], board_found['type']))
-#                     device_list.append(board_found)
-#         if device_list == [] and i != 1:
-#             print('Connect your Arduino!')
-#             i = 1
-#         if len(device_list) > 1 and i != 2:
-#             print('Please keep only one board')
-#             i = 2
-#             device_list = []
-#     return device_list
-
-
 def get_sketch_info():
     print('Querying Crypto Provisioning Sketch...')
-    # print('Waiting for response...')
     msg_payload = []
     msg_payload.append(COMMAND.GET_SKETCH_INFO.value)
-    # print(msg_payload)
     serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
     time.sleep(.5)
     response_data = []
-
     while(serial_port.in_waiting > 0):
         response_data.append(int.from_bytes(serial_port.read(), "little"))
     if(len(response_data) < MIN_MESSAGE_LENGTH):
         return ERROR.SKETCH_UNKNOWN
     parsed_response = parse_response_data(response_data, ERROR.SKETCH_UNKNOWN)
     return parsed_response
-
-# def install_sketch():
-#     print("Installing SAMD core")
-#     installing_core = subprocess.Popen(["arduino-cli","core","install","arduino:samd"], stdout=subprocess.PIPE)
-#     installing_core.wait()
-#     print("Installing ArduinoIoTCloud library")
-#     installing_lib = subprocess.Popen(["arduino-cli","lib","install","ArduinoIoTCloud"], stdout=subprocess.PIPE)
-#     installing_lib.wait()
-#     print("Installing ArduinoECCX08 library")
-#     installing_lib = subprocess.Popen(["arduino-cli","lib","install","ArduinoECCX08"], stdout=subprocess.PIPE)
-#     installing_lib.wait()
-#     print("Installing Arduino STL library")
-#     installing_lib = subprocess.Popen(["arduino-cli","lib","install","ArduinoSTL"], stdout=subprocess.PIPE)
-#     installing_lib.wait()
-#     print("Installing uCRC16Lib library")
-#     installing_lib = subprocess.Popen(["arduino-cli","lib","install","uCRC16Lib"], stdout=subprocess.PIPE)
-#     installing_lib.wait()
-#     print("Compiling and Uploading ProvisioningADVANCED")
-#     compiling_sketch = subprocess.Popen(["arduino-cli","compile","ProvisioningADVANCED","-b", device_list[0]['fqbn'], "-u", "-p", device_list[0]['board_port']], stdout=subprocess.PIPE)
-#     for stdout_line in iter(compiling_sketch.stdout.readline, ""):
-#         yield stdout_line
-#     compiling_sketch.wait()
-#     # print("Uploading Provisioning")
-#     # uploading_sketch = subprocess.Popen(["arduino-cli","upload","Provisioning","-b", device_list[0]['fqbn'], "-p", device_list[0]['board_port']], stdout=subprocess.PIPE)
-#     # uploading_sketch.wait()
-
-
-# def serial_connect():
-#     device_list = find_device()
-#     waiting_for_serial = True
-#     time.sleep(3)
-#     while waiting_for_serial:
-#         try:
-#             print(
-#                 f"Attempting connection to {device_list[0]['board_name']} on port {device_list[0]['board_port']}")
-#             serial_port_handler = serial.Serial(
-#                 device_list[0]['board_port'], 57600, write_timeout=5)
-#             waiting_for_serial = False
-#         except SerialException as se:
-#             print(f"cannot connect to serial because\n {se}")
-#             waiting_for_serial = True
-#         time.sleep(2)
-#     return serial_port_handler
 
 
 def connect_to_board(board):
@@ -327,7 +222,7 @@ def connect_to_board(board):
                 board.address, 57600, write_timeout=5)
             waiting_for_serial = False
         except SerialException as se:
-            print(f"cannot connect to serial because\n{se}")
+            print(f"cannot connect to serial:\n{se}")
             waiting_for_serial = True
         time.sleep(2)
     return serial_port_handler
@@ -426,7 +321,7 @@ if(args.api_credentials_file):
     json_config_file = args.api_credentials_file
 else:
     home = os.path.expanduser('~')
-    json_config_file = home + "/arduinoIoTCloudAPI.json"
+    json_config_file = home + "/ArduinoIoTCloudAPI_credentials.json"
 
 try:
     with open(json_config_file) as json_cfg:
@@ -435,81 +330,52 @@ try:
         secret_id = api_credentials['secret_id']
 except Exception as e:
     print("*****  ERROR  *****")
-    print(e)
-    print(f"Failed to load Arduino IoT API Credentials JSON [{json_config_file}]")
+    print(f"Failed to load Arduino IoT API Credentials JSON [{json_config_file}]\n")
+    print("This file is supposed to be found in the user's home directory.")
+    print("Alternatively it can be supplied as a parameter in the command.\n")
+    print("e.g.: python provisioning-helper.py --api_credentials_file PATH_TO_FILE.json\n")
+    print("You can rename the supplied ArduinoIoTCloudAPI_credentials-example.json")
+    print("to ArduinoIoTCloudAPI_credentials.json and use your generated API credentials")
+    exit()
 
 if(args.device_name):
     device_name = args.device_name
 else:
     device_name = f"IOTDevice_{int(time.time())}"  # input('Device name: ')
-
 print(f"Provisioning device with name {device_name}")
-
 
 device_list = boards_list()
 if len(device_list) < 1:
     exit('No board attached/discovered')
 
-
-# exit()
 selected_board = device_list[0]
 
 token = generate_token(client_id, secret_id)
 device_id = add_device(token, device_name, selected_board.fqbn, selected_board.type, selected_board.serial_number)
 print(f"IoT Cloud generated Device ID: {device_id}")
 
-
 serial_port = connect_to_board(device_list[0])
-
-
 time.sleep(1)
-# exit()
+
 sketch_unknown = True
 while(sketch_unknown):
     if(get_sketch_info() != (ERROR.SKETCH_UNKNOWN)):
-        print("Provisioning Sketch found. Moving forward...")
+        print(f"Provisioning Sketch found on {selected_board.name}")
         sketch_unknown = False
         break
-    print("Wrong Sketch Installed. Installation in progress...")
-    # serial_disconnect()
+    print("Provisioning Sketch not on board. Installation in progress...")
     upload_sketch(selected_board)
-    print(selected_board)
-    time.sleep(2)
-    print("upload_sketch done")
     time.sleep(1)
-    print("serial connect")
+    print("Provisioning Sketch uploaded")
+    time.sleep(1)
     serial_port = connect_to_board(selected_board)
-    time.sleep(3)
+    time.sleep(2)
 
-time.sleep(1)
 
 # send GET_CSR command (has payload > 0)
 # pass in the device_name as payload
 # ******* CHANGE TO THE DEVICE ID RETURNED BY THE API *********
 print(f"REQUESTING CSR for Device with ID: {device_id}")
-# msg_payload = []
-# msg_payload.append(COMMAND.GET_CSR.value)
-# msg_payload += list(bytearray(device_id.encode()))
-
-# serial_port.write(compose_message(MESSAGE_TYPE.COMMAND.value, msg_payload))
-# time.sleep(3)
-
-# response_data = []
-
-# while(serial_port.in_waiting > 0):
-#   response_data.append(int.from_bytes(serial_port.read(), "little"))
-
-# print(response_data)
-# csr = ""
-# parsed_response = parse_response_data(response_data, ERROR.CRC_FAIL)
-# if(parsed_response != ERROR.CRC_FAIL):
-#   print("CSR received")
-#   csr = bytearray(parsed_response).decode('utf-8')
-#   print(csr)
-# # certificate = send_csr(token, csr, device_id)
-# else:
-#   print("CSR data corrupted")
-#   print("Please relaunch the script to retry")
 
 print(device_id)
 print(device_id.encode())
@@ -573,4 +439,6 @@ print("Requesting Certificate Reconstruction")
 send_command(command=COMMAND.RECONSTRUCT_CERT, verbose_message="reconstruct ok")
 
 
-print('Done! New device {} added.'.format(device_name))
+print('Done!')
+print(f'IoT Cloud Device Name: {device_name}')
+print(f'IoT Cloud Device ID: {device_id}')
