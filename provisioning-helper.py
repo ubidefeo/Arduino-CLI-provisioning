@@ -1,3 +1,5 @@
+#!python
+
 from collections import namedtuple
 from sys import stdout
 import requests
