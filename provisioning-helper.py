@@ -153,7 +153,7 @@ def generate_token(client_id, secret_id):
     return token
 
 
-def add_device(token, device_name, fqbn, type, serial):
+def add_device(token, device_name, fqbn, type, serial = ""):
     url = 'http://api2.arduino.cc/iot/v2/devices'
     headers = {'content-type': 'application/x-www-form-urlencoded',
                'Authorization': 'Bearer ' + token
@@ -180,7 +180,6 @@ def send_csr(token, csr, device_id):
     response = requests.put(url, headers=headers, data=json.dumps(data_cert))
     return json.loads(response.text)['compressed']
 
-
 def boards_list():
     device_list = []
     ino_board_list = subprocess.run(
@@ -192,7 +191,10 @@ def boards_list():
             continue
         my_board = SimpleNamespace(**device["boards"][0])
         my_board.address = device['address']
-        my_board.serial_number = device['serial_number']
+        if "serial_number" in device:
+            my_board.serial_number = device['serial_number']
+        else:
+            my_board.serial_number = ""
         my_board.type = my_board.fqbn.rpartition(':')[2]
         device_list.append(my_board)
     return device_list
@@ -234,83 +236,112 @@ def serial_disconnect():
     serial_port.close()
 
 
+def find_binary(fw_file_path):
+    try:
+        fw_file_res = open(fw_file_path, 'r')
+        fw_file_res.close()
+        return True
+
+    except FileNotFoundError as e:
+        print(e)
+        return False
+
+
 def upload_sketch(board):
     platform_id = board.fqbn.rpartition(':')[0]
-    print(f"Installing {platform_id} core")
-    installing_core = subprocess.Popen(
-        ["arduino-cli", "core", "install", platform_id], stdout=subprocess.PIPE)
-    while True:
-        output = installing_core.stdout.readline().decode()
-        if output == '' and installing_core.poll() is not None:
-            break
-        if output:
-            print(output.strip())
-    installing_core.wait()
+    binary_file_path = f'cryptoconfig_fw/{board.fqbn.replace(":", ".")}.bin'
+    print(binary_file_path)
+    if find_binary(binary_file_path):
+        print("Uploading pre-compiled ArduinoIoTCloud-CryptoConfig Sketch")
+        uploading_sketch = subprocess.Popen(["arduino-cli", "upload", "--input-file",
+                                            binary_file_path, "-b",
+                                            board.fqbn, "-p", board.address], 
+                                            stdout=subprocess.PIPE)
+        while True:
+            output = uploading_sketch.stdout.readline().decode()
+            if output == '' and uploading_sketch.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+        uploading_sketch.wait()
+    else:
+        print(f"Installing {platform_id} core")
+        installing_core = subprocess.Popen(
+            ["arduino-cli", "core", "install", platform_id], stdout=subprocess.PIPE)
+        while True:
+            output = installing_core.stdout.readline().decode()
+            if output == '' and installing_core.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+        installing_core.wait()
 
-    print()
+        print()
 
-    print("Installing ArduinoIoTCloud library")
-    installing_lib = subprocess.Popen(
-        ["arduino-cli", "lib", "install", "ArduinoIoTCloud"], stdout=subprocess.PIPE)
-    while True:
-        output = installing_lib.stdout.readline().decode()
-        if output == '' and installing_lib.poll() is not None:
-            break
-        if output:
-            print(output.strip())
-    installing_lib.wait()
+        print("Installing ArduinoIoTCloud library")
+        installing_lib = subprocess.Popen(
+            ["arduino-cli", "lib", "install", "ArduinoIoTCloud"], stdout=subprocess.PIPE)
+        while True:
+            output = installing_lib.stdout.readline().decode()
+            if output == '' and installing_lib.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+        installing_lib.wait()
 
-    print()
+        print()
 
-    print("Installing ArduinoECCX08 library")
-    installing_lib = subprocess.Popen(
-        ["arduino-cli", "lib", "install", "ArduinoECCX08"], stdout=subprocess.PIPE)
-    while True:
-        output = installing_lib.stdout.readline().decode()
-        if output == '' and installing_lib.poll() is not None:
-            break
-        if output:
-            print(output.strip())
-    installing_lib.wait()
+        print("Installing ArduinoECCX08 library")
+        installing_lib = subprocess.Popen(
+            ["arduino-cli", "lib", "install", "ArduinoECCX08"], stdout=subprocess.PIPE)
+        while True:
+            output = installing_lib.stdout.readline().decode()
+            if output == '' and installing_lib.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+        installing_lib.wait()
 
-    print()
+        print()
 
-    print("Installing Arduino STL library")
-    installing_lib = subprocess.Popen(
-        ["arduino-cli", "lib", "install", "ArduinoSTL"], stdout=subprocess.PIPE)
-    while True:
-        output = installing_lib.stdout.readline().decode()
-        if output == '' and installing_lib.poll() is not None:
-            break
-        if output:
-            print(output.strip())
-    installing_lib.wait()
+        print("Installing Arduino STL library")
+        installing_lib = subprocess.Popen(
+            ["arduino-cli", "lib", "install", "ArduinoSTL"], stdout=subprocess.PIPE)
+        while True:
+            output = installing_lib.stdout.readline().decode()
+            if output == '' and installing_lib.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+        installing_lib.wait()
 
-    print()
+        print()
 
-    print("Installing uCRC16Lib library")
-    installing_lib = subprocess.Popen(
-        ["arduino-cli", "lib", "install", "uCRC16Lib"], stdout=subprocess.PIPE)
-    while True:
-        output = installing_lib.stdout.readline().decode()
-        if output == '' and installing_lib.poll() is not None:
-            break
-        if output:
-            print(output.strip())
-    installing_lib.wait()
+        print("Installing uCRC16Lib library")
+        installing_lib = subprocess.Popen(
+            ["arduino-cli", "lib", "install", "uCRC16Lib"], stdout=subprocess.PIPE)
+        while True:
+            output = installing_lib.stdout.readline().decode()
+            if output == '' and installing_lib.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+        installing_lib.wait()
 
-    print()
+        print()
 
-    print("Compiling and Uploading ProvisioningADVANCED")
-    compiling_sketch = subprocess.Popen(["arduino-cli", "compile", "ProvisioningADVANCED", "-b",
-                                         board.fqbn, "-u", "-p", board.address], stdout=subprocess.PIPE)
-    while True:
-        output = compiling_sketch.stdout.readline().decode()
-        if output == '' and compiling_sketch.poll() is not None:
-            break
-        if output:
-            print(output.strip())
-    compiling_sketch.wait()
+        print("Compiling and Uploading ArduinoIoTCloud-CryptoConfig Sketch")
+        compiling_sketch = subprocess.Popen(["arduino-cli", "compile",
+                                            "ArduinoIoTCloud-CryptoConfig", "-b",
+                                            board.fqbn, "-u", "-p", board.address], 
+                                            stdout=subprocess.PIPE)
+        while True:
+            output = compiling_sketch.stdout.readline().decode()
+            if output == '' and compiling_sketch.poll() is not None:
+                break
+            if output:
+                print(output.strip())
+        compiling_sketch.wait()
 
 
 if __name__ == "__main__":
@@ -330,8 +361,10 @@ try:
         api_credentials = json.load(json_cfg)
         client_id = api_credentials['client_id']
         secret_id = api_credentials['secret_id']
+    json_cfg.close()
 except Exception as e:
     print("*****  ERROR  *****")
+    print(e)
     print(f"Failed to load Arduino IoT API Credentials JSON [{json_config_file}]\n")
     print("This file is supposed to be found in the user's home directory.")
     print("Alternatively it can be supplied as a parameter in the command.\n")
