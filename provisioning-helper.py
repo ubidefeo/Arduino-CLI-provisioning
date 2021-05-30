@@ -1,13 +1,16 @@
 #!python
 
-from collections import namedtuple
-from sys import stdout
+# from collections import namedtuple
+# from sys import stdout
+
 import requests
 import json
+
 from serial.serialutil import SerialException
-import serial.tools.list_ports
+# import serial.tools.list_ports
 import serial
 import time
+from time import sleep
 import subprocess
 import crcmod
 import os
@@ -17,6 +20,8 @@ import argparse
 from enum import Enum, auto
 
 from types import SimpleNamespace
+
+from helpers import send_request
 
 PROVISIONING_SKETCH_RESPONSE = [0x55, 0xaa, 0x01, 0x01, 0xff, 0xaa, 0x55]
 MAX_SERIAL_BUFFER = 128
@@ -79,7 +84,7 @@ class ERROR(Enum):
     ERROR_NO_DATA = auto()
 
 
-# FUNCTIONS
+# Python to Board FUNCTIONS
 
 def compose_message(msg_type, msg_payload):
     formed_message = bytearray(msg_start)
@@ -132,13 +137,16 @@ def send_command(command, payload=bytearray([]), encode=False, verbose_message="
     parsed_response = parse_response_data(response_data, ERROR.CRC_FAIL)
 
     if(parsed_response != ERROR.CRC_FAIL):
-        print(f"ACK: {verbose_message}")
+        print(f"{verbose_message}: OK")
+        print()
         return parsed_response
     else:
         print("data corrupted")
         print("Please relaunch the script to retry")
         return ERROR.CRC_FAIL
 
+
+# Python to API FUNCTIONS
 
 def generate_token(client_id, secret_id):
     url = 'https://api2.arduino.cc/iot/v1/clients/token'
@@ -148,12 +156,13 @@ def generate_token(client_id, secret_id):
             'client_secret': secret_id,
             'audience': 'https://api2.arduino.cc/iot'
             }
-    response = requests.post(url, headers=headers, data=data)
+    response = send_request(requests.Request(
+        "POST", url, headers=headers, data=data), print_request=False, print_response=False)
     token = json.loads(response.text)['access_token']
     return token
 
 
-def add_device(token, device_name, fqbn, type, serial = ""):
+def add_device(token, device_name, fqbn, type, serial):
     url = 'http://api2.arduino.cc/iot/v2/devices'
     headers = {'content-type': 'application/x-www-form-urlencoded',
                'Authorization': 'Bearer ' + token
@@ -163,9 +172,34 @@ def add_device(token, device_name, fqbn, type, serial = ""):
             'type': type,
             'serial': serial
             }
-    response = requests.put(url, headers=headers, data=data)
+    response = send_request(requests.Request(
+        "PUT", url, headers=headers, data=data), print_request=False, print_response=False)
+    print(response)
     device_id = json.loads(response.text)['id']
     return device_id
+
+
+def delete_device(device_name, device_id, force_deletion=False):
+    if not force_deletion:
+        confirm_delete = input(
+            f'Are you sure you want to delete {device_name}? [Y,n]: ')
+        if confirm_delete == 'Y':
+            pass
+        else:
+            print(f'{device_name} will not be deleted')
+            return
+
+    url = f'http://api2.arduino.cc/iot/v2/devices/{device_id}'
+    headers = {'content-type': 'application/x-www-form-urlencoded',
+               'Authorization': 'Bearer ' + token
+               }
+
+    response = send_request(requests.Request(
+        "DELETE", url, headers=headers), print_request=False, print_response=False)
+    if response.status_code == 200:
+        print(f'device {device_name} with ID {device_id} has been deleted')
+    else:
+        print(f'device {device_name} with ID {device_id} could not be deleted')
 
 
 def send_csr(token, csr, device_id):
@@ -177,8 +211,12 @@ def send_csr(token, csr, device_id):
                  'csr': csr,
                  'enabled': True
                  }
-    response = requests.put(url, headers=headers, data=json.dumps(data_cert))
+    data = json.dumps(data_cert)
+    # response = requests.put(url, headers=headers, data=json.dumps(data_cert))
+    response = send_request(requests.Request(
+        "PUT", url=url, headers=headers, data=data), print_request=True, print_response=True)
     return json.loads(response.text)['compressed']
+
 
 def boards_list():
     device_list = []
@@ -193,8 +231,6 @@ def boards_list():
         my_board.address = device['address']
         if "serial_number" in device:
             my_board.serial_number = device['serial_number']
-        else:
-            my_board.serial_number = ""
         my_board.type = my_board.fqbn.rpartition(':')[2]
         device_list.append(my_board)
     return device_list
@@ -222,6 +258,10 @@ def connect_to_board(board):
         try:
             print(
                 f"Attempting connection to {board.name} on port {board.address}")
+            # serial_port_handler = serial.Serial(board.address, 1200, write_timeout=2)
+            # serial_port_handler.open()
+            # serial_port_handler.close()
+            sleep(1)
             serial_port_handler = serial.Serial(
                 board.address, 57600, write_timeout=5)
             waiting_for_serial = False
@@ -255,7 +295,7 @@ def upload_sketch(board):
         print("Uploading pre-compiled ArduinoIoTCloud-CryptoConfig Sketch")
         uploading_sketch = subprocess.Popen(["arduino-cli", "upload", "--input-file",
                                             binary_file_path, "-b",
-                                            board.fqbn, "-p", board.address], 
+                                            board.fqbn, "-p", board.address],
                                             stdout=subprocess.PIPE)
         while True:
             output = uploading_sketch.stdout.readline().decode()
@@ -333,7 +373,7 @@ def upload_sketch(board):
         print("Compiling and Uploading ArduinoIoTCloud-CryptoConfig Sketch")
         compiling_sketch = subprocess.Popen(["arduino-cli", "compile",
                                             "ArduinoIoTCloud-CryptoConfig", "-b",
-                                            board.fqbn, "-u", "-p", board.address], 
+                                             board.fqbn, "-u", "-p", board.address],
                                             stdout=subprocess.PIPE)
         while True:
             output = compiling_sketch.stdout.readline().decode()
@@ -345,9 +385,12 @@ def upload_sketch(board):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Arduino IoT Cloud Crypto-Element Provisioning Assistant')
-    parser.add_argument('--api_credentials_file', help='Provide the path to the file containing Client ID and API Secret. Example: --api_credentials_file=/home/myuser/ArduinoIoTCloudAPI_credentials.json')
-    parser.add_argument('--device_name', help='Choose the name your device will have in your dashboard. Example: --device_name=myNanoIoT')
+    parser = argparse.ArgumentParser(
+        description='Arduino IoT Cloud Crypto-Element Provisioning Assistant')
+    parser.add_argument('--api_credentials_file',
+                        help='Provide the path to the file containing Client ID and API Secret. Example: --api_credentials_file=/home/myuser/ArduinoIoTCloudAPI_credentials.json')
+    parser.add_argument(
+        '--device_name', help='Choose the name your device will have in your dashboard. Example: --device_name=myNanoIoT')
     args = parser.parse_args()
 
 if(args.api_credentials_file):
@@ -365,7 +408,8 @@ try:
 except Exception as e:
     print("*****  ERROR  *****")
     print(e)
-    print(f"Failed to load Arduino IoT API Credentials JSON [{json_config_file}]\n")
+    print(
+        f"Failed to load Arduino IoT API Credentials JSON [{json_config_file}]\n")
     print("This file is supposed to be found in the user's home directory.")
     print("Alternatively it can be supplied as a parameter in the command.\n")
     print("e.g.: python provisioning-helper.py --api_credentials_file PATH_TO_FILE.json\n")
@@ -386,10 +430,29 @@ if len(device_list) < 1:
 selected_board = device_list[0]
 
 token = generate_token(client_id, secret_id)
-device_id = add_device(token, device_name, selected_board.fqbn, selected_board.type, selected_board.serial_number)
+device_id = add_device(token, device_name, selected_board.fqbn,
+                       selected_board.type, selected_board.serial_number)
 print(f"IoT Cloud generated Device ID: {device_id}")
 
-serial_port = connect_to_board(device_list[0])
+# confirm = input("touch? ")
+# if confirm == 'Y':
+#     serial_port_handler = serial.Serial(selected_board.address, 1200, write_timeout=2)
+#     # serial_port_handler.open()
+#     sleep(1)
+#     serial_port_handler.close()
+#     sleep(1)
+
+# confirm = input("touch? ")
+# if confirm == 'Y':
+#     serial_port_handler = serial.Serial(selected_board.address, 1200, write_timeout=2)
+#     # serial_port_handler.open()
+#     sleep(1)
+#     serial_port_handler.close()
+#     sleep(1)
+
+# input('any key to continue...')
+
+serial_port = connect_to_board(selected_board)
 time.sleep(1)
 
 sketch_unknown = True
@@ -417,7 +480,8 @@ print(device_id.encode())
 print(bytearray(device_id.encode()))
 print(list(bytearray(device_id.encode())))
 
-csr = send_command(command=COMMAND.GET_CSR, payload=list(bytearray(device_id.encode())), encode=False, verbose_message="CSR Obtained")
+csr = send_command(command=COMMAND.GET_CSR, payload=list(
+    bytearray(device_id.encode())), encode=False, verbose_message="CSR Obtained")
 print(csr)
 
 if(csr != ERROR.CRC_FAIL):
@@ -432,7 +496,8 @@ certificate = send_csr(token, csr, device_id)
 print(certificate)
 
 print("Requesting Begin Storage")
-send_command(command=COMMAND.BEGIN_STORAGE, verbose_message="Crytpo Storage INIT OK")
+send_command(command=COMMAND.BEGIN_STORAGE,
+             verbose_message="Crytpo Storage INIT OK")
 
 year = certificate['not_before'][:4]
 print(f"Sending Year: {year}")
@@ -458,22 +523,27 @@ cert_serial = bytearray.fromhex(certificate['serial'])
 print(f"Sending Certificate Serial: {cert_serial}")
 send_command(COMMAND.SET_CERT_SERIAL, cert_serial, False, "Serial set")
 
-cert_authority_key_id = bytearray.fromhex(certificate['authority_key_identifier'])
+cert_authority_key_id = bytearray.fromhex(
+    certificate['authority_key_identifier'])
 print(f"Sending Certificate Authority Key: {cert_authority_key_id}")
-send_command(COMMAND.SET_AUTH_KEY, cert_authority_key_id, False, "Authority Key ID set")
+send_command(COMMAND.SET_AUTH_KEY, cert_authority_key_id,
+             False, "Authority Key ID set")
 
-signature = bytearray.fromhex(certificate['signature_asn1_x'] + certificate['signature_asn1_y'])
+signature = bytearray.fromhex(
+    certificate['signature_asn1_x'] + certificate['signature_asn1_y'])
 print(f"Sending Signature: {signature}")
 send_command(COMMAND.SET_SIGNATURE, signature, False, "Signature set")
 time.sleep(1)
 print("Requesting End Storage")
-send_command(COMMAND.END_STORAGE)
+send_command(command=COMMAND.END_STORAGE, verbose_message="End Storage")
 
 time.sleep(2)
 print("Requesting Certificate Reconstruction")
-send_command(command=COMMAND.RECONSTRUCT_CERT, verbose_message="reconstruct ok")
+send_command(command=COMMAND.RECONSTRUCT_CERT,
+             verbose_message="Reconstrucing Certificate")
 
-
-print('Done!')
+print('Device provisioning successful')
 print(f'IoT Cloud Device Name: {device_name}')
 print(f'IoT Cloud Device ID: {device_id}')
+
+print('My job here is done!')
