@@ -1,4 +1,4 @@
-#!python
+#!/usr/bin/env python3
 
 # from collections import namedtuple
 # from sys import stdout
@@ -391,6 +391,8 @@ if __name__ == "__main__":
                         help='Provide the path to the file containing Client ID and API Secret. Example: --api_credentials_file=/home/myuser/ArduinoIoTCloudAPI_credentials.json')
     parser.add_argument(
         '--device_name', help='Choose the name your device will have in your dashboard. Example: --device_name=myNanoIoT')
+    parser.add_argument(
+        '--device_port', help='Select the device you want provision via the the serial port. Example: --device_port=COM1')
     args = parser.parse_args()
 
 if(args.api_credentials_file):
@@ -427,7 +429,10 @@ device_list = boards_list()
 if len(device_list) < 1:
     exit('No board attached/discovered')
 
-selected_board = device_list[0]
+if args.device_port:
+    selected_board = [ d for d in device_list if d.address == args.device_port ][0]
+else:
+    selected_board = device_list[0]
 
 token = generate_token(client_id, secret_id)
 device_id = add_device(token, device_name, selected_board.fqbn,
